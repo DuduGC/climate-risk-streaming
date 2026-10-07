@@ -5,7 +5,8 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 ## Estado
 
 - Etapa 1: concluída; implementação, revisão e critérios de infraestrutura aprovados em 2026-10-07.
-- Etapas 2–10: pendentes; não iniciar antes do aceite da fundação.
+- Etapa 2: em implementação; spec e plano aprovados.
+- Etapas 3–10: pendentes.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Git inicializado na branch `foundation`.
 - Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
@@ -62,4 +63,4 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 
 Os quatro serviços permanecem saudáveis. O comando `docker compose up -d` subiu a infraestrutura; `--wait` comprovou prontidão com prazo limitado. Os testes operacionais descritos acima passaram; Pytest permanece sem casos e não é usado como evidência funcional desta etapa. Nenhum job, integração Open-Meteo, topic ou tabela de negócio foi antecipado.
 
-Próxima etapa: Etapa 2 — Open-Meteo. Ainda não iniciada.
+Etapa 2 iniciada. Ledger: docs/implementation/stage-2-progress.md.

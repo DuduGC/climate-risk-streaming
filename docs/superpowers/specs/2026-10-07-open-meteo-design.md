@@ -1,6 +1,6 @@
 # Etapa 2 — Open-Meteo
 
-Status: proposta para revisão. Etapa 1 concluída; repositório limpo no início desta etapa.
+Status: especificação aprovada pelo usuário em 2026-10-07; plano e implementação pendentes. Etapa 1 concluída; repositório limpo no início desta etapa.
 
 ## Objetivo e escopo
 

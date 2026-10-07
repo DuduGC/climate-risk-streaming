@@ -1,0 +1,24 @@
+{
+  "latitude": -22.875,
+  "longitude": -43.125,
+  "current_units": {
+    "time": "unixtime",
+    "interval": "seconds",
+    "temperature_2m": "°C",
+    "precipitation": "mm",
+    "wind_speed_10m": "km/h",
+    "wind_gusts_10m": "km/h",
+    "visibility": "m",
+    "weather_code": "wmo code"
+  },
+  "current": {
+    "time": 1791379200,
+    "interval": 900,
+    "temperature_2m": 27.4,
+    "precipitation": 18.2,
+    "wind_speed_10m": 42.1,
+    "wind_gusts_10m": 58.3,
+    "visibility": 7000,
+    "weather_code": 61
+  }
+}
