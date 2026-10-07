@@ -5,7 +5,7 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 ## Estado
 
 - Etapa 1: concluída; implementação, revisão e critérios de infraestrutura aprovados em 2026-10-07.
-- Etapa 2: em implementação; spec e plano aprovados.
+- Etapa 2: concluída; critérios e revisão aprovados em 2026-10-07.
 - Etapas 3–10: pendentes.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Git inicializado na branch `foundation`.
@@ -63,4 +63,38 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 
 Os quatro serviços permanecem saudáveis. O comando `docker compose up -d` subiu a infraestrutura; `--wait` comprovou prontidão com prazo limitado. Os testes operacionais descritos acima passaram; Pytest permanece sem casos e não é usado como evidência funcional desta etapa. Nenhum job, integração Open-Meteo, topic ou tabela de negócio foi antecipado.
 
-Etapa 2 iniciada. Ledger: docs/implementation/stage-2-progress.md.
+Etapa 2 concluída. Ledger: docs/implementation/stage-2-progress.md.
+
+## Etapa 2 — Open-Meteo concluída
+
+Implementadores: GPT-6 Luna Max, tarefas sequenciais; revisão independente por contrato e final.
+
+Implementado:
+- Location/WeatherEvent imutáveis, localidades RJ01/SP01/CT01, validação direta e normalização pura.
+- Schema versão 1 com source=open-meteo e measurement_interval_seconds, unidades fixas e timestamps UTC/Z.
+- Cliente HTTP síncrono Requests 2.34.2: timeout de conexão/leitura de 3/10 s, até 3 tentativas, backoff de 0,5/1 s e Retry-After até 5 s.
+- TLS verificado, redirects recusados, sessão própria sem configuração .netrc, respostas sempre fechadas e teto de 128 KiB descomprimidos.
+- Testes unitários, integração HTTP real no loopback e smoke público opt-in; README atualizado.
+
+Evidências verificadas pelo principal em Python 3.11.14:
+- Primeira tarefa:245 testes passaram e Ruff aprovado após correção UTC.
+- Suíte final offline:291 passed, 1 skipped, exit 0, em 5,84 s.
+- Ruff final:All checks passed, exit 0.
+- Smoke OPEN_METEO_LIVE=1: 1 passed, exit 0, em 0,77 s; evento RJ01 obtido da API e serializado conforme contrato.
+- Revisão final: ambos P2 resolvidos, sem achados abertos.
+- git diff --check sem erros antes do registro final.
+
+Problemas e correções:
+- Artefato de newline em teste: literal removido, todos os cenários preservados.
+- Datetime aware cuja conversão UTC sai do domínio: construção rejeita WeatherValidationError; regressões red/green.
+- JSON com inteiro com 5000 dígitos/aninhamento extremo:ValueError/RecursionError convertidos em OpenMeteoError, sem retry e com resposta fechada.
+- README sem caminho de importação src: PYTHONPATH documentado em PowerShell/Linux.
+- Importação fora de ordem apontada por Ruff: corrigida.
+
+Limitações:
+- Dados da fonte são modelados, não observações de estação; precipitação corresponde ao intervalo retornado.
+- Timeouts de conexão/leitura não são deadline absoluto; Retry-After em formato de data usa backoff local.
+- Python 3.11 é o ambiente de referência dos testes. Revisão de código não substitui a execução nessa versão.
+- Nenhum polling, Producer, topic Kafka, job Flink, sink ou serviço novo foi antecipado.
+
+Próxima etapa: Etapa 3 — Python Producer + Kafka. Ainda não iniciada.

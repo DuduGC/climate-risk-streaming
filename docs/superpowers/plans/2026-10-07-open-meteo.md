@@ -44,11 +44,11 @@
 
 ## Preparação — principal
 
-- [ ] Registrar aprovação da especificação e deste plano quando concedida; atualizar progresso sem antecipar aceite.
-- [ ] Confirmar branch foundation e estado limpo. Manter diretório/branch locais, conforme método já adotado, sem checkout redundante ou alterações Git globais.
-- [ ] Registrar ledger específico da Etapa 2 em docs/implementation/stage-2-progress.md; não sobrescrever relatórios da Etapa 1.
-- [ ] Extrair briefs com constraints/interfaces para cada agente; arquivos compartilhados apenas sequencialmente.
-- [ ] Preparar ambiente Python 3.11 (container já disponível), instalar requirements-dev; após Tarefa 2 instalar também requirements.txt.
+- [x] Registrar aprovação da especificação e deste plano quando concedida; atualizar progresso sem antecipar aceite.
+- [x] Confirmar branch foundation e estado limpo. Manter diretório/branch locais, conforme método já adotado, sem checkout redundante ou alterações Git globais.
+- [x] Registrar ledger específico da Etapa 2 em docs/implementation/stage-2-progress.md; não sobrescrever relatórios da Etapa 1.
+- [x] Extrair briefs com constraints/interfaces para cada agente; arquivos compartilhados apenas sequencialmente.
+- [x] Preparar ambiente Python 3.11 (container já disponível), instalar requirements-dev; após Tarefa 2 instalar também requirements.txt.
 
 ## Tarefa 1 — Modelos, localidades e normalização
 
@@ -61,16 +61,16 @@
 - open_meteo.py: normalize_current(payload: Mapping[str, object], location: Location, *, ingestion_timestamp: datetime) -> WeatherEvent.
 - Fixture manual mínima com current/current_units, sem respostas volumosas ou dados privados. epoch 1791379200 corresponde a 2026-10-07T13:20:00Z, confirmado via DateTimeOffset antes da revisão do plano.
 
-- [ ] Escrever testes antes da implementação e executar para comprovar falha por comportamento ausente.
-- [ ] Criar testes de Location: IDs/nome vazios, tipos errados, coordenadas bool/não finitas/fora do intervalo, duplicate IDs e configuração inicial exata.
-- [ ] Criar fixture com time=1791379200, interval=900, temperatura27.4, precipitação18.2, vento42.1, rajada58.3, visibilidade7000, weather_code61 e unidades exatas.
-- [ ] Testar normalização com ingestão datetime(2026,10,7,13,20,2,tzinfo=UTC); assert source=="open-meteo", schema_version==1, measurement_interval_seconds==900, event_timestamp != ingestion_timestamp e coord/ID da Location.
-- [ ] Testar to_dict: timestamps terminam Z, json.dumps(..., allow_nan=False) funciona; offsets aware convertem UTC; datetime naive é rejeitado.
-- [ ] Parametrizar ausentes/null/bool/string/NaN/infinito/unidades erradas e limites inclusivos para os seis campos. Testar interval 0/3601/True/900.5 e time True/null/NaN/overflow.
-- [ ] Weather code válido é inteiro no conjunto {0,1,2,3,45,48,51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99}; rejeitar 4, bool, fração.
-- [ ] Implementar mínimo para esses testes. Não depender de Requests nesta tarefa e não realizar rede.
-- [ ] Rodar python -m pytest e python -m ruff check .; registrar número de casos/resultados e ciclo red/green no relatório.
-- [ ] Principal revisa contrato, erros, UTC e schema; solicitar correções ao mesmo agente antes da Tarefa 2.
+- [x] Escrever testes antes da implementação e executar para comprovar falha por comportamento ausente.
+- [x] Criar testes de Location: IDs/nome vazios, tipos errados, coordenadas bool/não finitas/fora do intervalo, duplicate IDs e configuração inicial exata.
+- [x] Criar fixture com time=1791379200, interval=900, temperatura27.4, precipitação18.2, vento42.1, rajada58.3, visibilidade7000, weather_code61 e unidades exatas.
+- [x] Testar normalização com ingestão datetime(2026,10,7,13,20,2,tzinfo=UTC); assert source=="open-meteo", schema_version==1, measurement_interval_seconds==900, event_timestamp != ingestion_timestamp e coord/ID da Location.
+- [x] Testar to_dict: timestamps terminam Z, json.dumps(..., allow_nan=False) funciona; offsets aware convertem UTC; datetime naive é rejeitado.
+- [x] Parametrizar ausentes/null/bool/string/NaN/infinito/unidades erradas e limites inclusivos para os seis campos. Testar interval 0/3601/True/900.5 e time True/null/NaN/overflow.
+- [x] Weather code válido é inteiro no conjunto {0,1,2,3,45,48,51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99}; rejeitar 4, bool, fração.
+- [x] Implementar mínimo para esses testes. Não depender de Requests nesta tarefa e não realizar rede.
+- [x] Rodar python -m pytest e python -m ruff check .; registrar número de casos/resultados e ciclo red/green no relatório.
+- [x] Principal revisa contrato, erros, UTC e schema; solicitar correções ao mesmo agente antes da Tarefa 2.
 
 ## Tarefa 2 — Cliente HTTP e integração
 
@@ -83,29 +83,33 @@
 - Sessão própria com trust_env=False para não anexar autenticação .netrc; TLS permanece padrão/verificado. Sem retry automático de adapter além do loop explícito.
 - Erro de contrato continua WeatherValidationError; falha HTTP/JSON/tamanho torna-se OpenMeteoError sem conteúdo completo da resposta.
 
-- [ ] Escrever testes red antes do cliente; requirements.txt recebe somente requests==2.34.2 (dependência direta).
-- [ ] Unitários com transporte injetado: parâmetros exatos, timeout (3,10), stream=True, allow_redirects=False; captura clock após corpo; resposta/Session fechadas segundo ownership.
-- [ ] Retry: 503,503,200 resulta em três requests e sleeps [0.5,1.0]; falha contínua para na terceira sem sleep adicional. Timeout e conexão transitória seguem mesma regra.
-- [ ] 429 com Retry-After=2 espera2; valor100 limita5; ausente/não numérico/negativo usa backoff. Não interpretar HTTP-date nesta versão; documentar fallback.
-- [ ] Parametrizar 400/401/403/404, 301/302, SSLError, JSON inválido e schema inválido: uma tentativa, sem sleep; exceções com contexto limitado/localidade.
-- [ ] Ler iter_content em chunks pequenos, contando bytes descomprimidos. Limite exato aceito se JSON válido; byte seguinte falha. Empty body, UTF-8 inválido e JSON não objeto falham sem retry.
-- [ ] Capturar timeout/conexão também durante leitura; fechar response antes de backoff. Não tratar SSLError como falha transitória genérica.
-- [ ] Servidor local ThreadingHTTPServer no loopback/porta efêmera, teardown em finally: JSON válido, 503 seguido200, 429 seguido200, 400, redirect não seguido, corpo grande sem Content-Length e gzip grande. Validar eventos e contagem de requests observados no servidor; não somente contagem de mocks.
-- [ ] Simular resposta lenta no servidor com timeout curto apenas no transporte de teste; comprovar a classificação/finitude sem esperar 30s nem alterar defaults de produção.
-- [ ] Implementar cliente mínimo preservando contrato Tarefa1; não polling, paralelismo, Kafka ou regras de risco.
-- [ ] Criar smoke test marker live que só roda com OPEN_METEO_LIVE=1; teste no padrão usa skip explícito. Fazer consulta RJ01 real e validar contrato/serialização com intervalo informado.
-- [ ] README: instalação de requirements.txt e requirements-dev, uso do context manager em chamada única, comandos offline/live, campos/unidades/modelos/intervalo e limitações. Requests timeouts são conexão/inatividade de leitura, não garantia de prazo total absoluto.
-- [ ] Rodar suíte inteira offline e Ruff; principal faz review/testes/live e solicita correções antes do aceite.
+- [x] Escrever testes red antes do cliente; requirements.txt recebe somente requests==2.34.2 (dependência direta).
+- [x] Unitários com transporte injetado: parâmetros exatos, timeout (3,10), stream=True, allow_redirects=False; captura clock após corpo; resposta/Session fechadas segundo ownership.
+- [x] Retry: 503,503,200 resulta em três requests e sleeps [0.5,1.0]; falha contínua para na terceira sem sleep adicional. Timeout e conexão transitória seguem mesma regra.
+- [x] 429 com Retry-After=2 espera2; valor100 limita5; ausente/não numérico/negativo usa backoff. Não interpretar HTTP-date nesta versão; documentar fallback.
+- [x] Parametrizar 400/401/403/404, 301/302, SSLError, JSON inválido e schema inválido: uma tentativa, sem sleep; exceções com contexto limitado/localidade.
+- [x] Ler iter_content em chunks pequenos, contando bytes descomprimidos. Limite exato aceito se JSON válido; byte seguinte falha. Empty body, UTF-8 inválido e JSON não objeto falham sem retry.
+- [x] Capturar timeout/conexão também durante leitura; fechar response antes de backoff. Não tratar SSLError como falha transitória genérica.
+- [x] Servidor local ThreadingHTTPServer no loopback/porta efêmera, teardown em finally: JSON válido, 503 seguido200, 429 seguido200, 400, redirect não seguido, corpo grande sem Content-Length e gzip grande. Validar eventos e contagem de requests observados no servidor; não somente contagem de mocks.
+- [x] Simular resposta lenta no servidor com timeout curto apenas no transporte de teste; comprovar a classificação/finitude sem esperar 30s nem alterar defaults de produção.
+- [x] Implementar cliente mínimo preservando contrato Tarefa1; não polling, paralelismo, Kafka ou regras de risco.
+- [x] Criar smoke test marker live que só roda com OPEN_METEO_LIVE=1; teste no padrão usa skip explícito. Fazer consulta RJ01 real e validar contrato/serialização com intervalo informado.
+- [x] README: instalação de requirements.txt e requirements-dev, uso do context manager em chamada única, comandos offline/live, campos/unidades/modelos/intervalo e limitações. Requests timeouts são conexão/inatividade de leitura, não garantia de prazo total absoluto.
+- [x] Rodar suíte inteira offline e Ruff; principal faz review/testes/live e solicita correções antes do aceite.
 
 ## Verificação final e fechamento — principal
 
-- [ ] Revisão por tarefa e final com evidências, sem aceitar apenas declaração de agentes.
-- [ ] python -m ruff check . e python -m pytest em Python 3.11: exit0, contagem real, smoke skip esperado no offline.
-- [ ] OPEN_METEO_LIVE=1 python -m pytest tests/integration/test_open_meteo_live.py -m live: evento real normalizado, exit0. Se fonte indisponível, registrar pendência e não aprovar integração sem evidência.
-- [ ] Revisar limites, erro permanente, fechamento, ausência de secrets/logs excessivos, retries e compatibilidade futura do schema.
-- [ ] git diff --check; registrar progresso, relatórios e decisões. Commit local, sem remoto/push.
-- [ ] Reportar ETAPA 2 CONCLUÍDA no formato exigido somente após os critérios. Etapa 3 permanece fora deste plano.
+- [x] Revisão por tarefa e final com evidências, sem aceitar apenas declaração de agentes.
+- [x] python -m ruff check . e python -m pytest em Python 3.11: exit0, contagem real, smoke skip esperado no offline.
+- [x] OPEN_METEO_LIVE=1 python -m pytest tests/integration/test_open_meteo_live.py -m live: evento real normalizado, exit0. Se fonte indisponível, registrar pendência e não aprovar integração sem evidência.
+- [x] Revisar limites, erro permanente, fechamento, ausência de secrets/logs excessivos, retries e compatibilidade futura do schema.
+- [x] git diff --check; registrar progresso, relatórios e decisões. Commit local, sem remoto/push.
+- [x] Reportar ETAPA 2 CONCLUÍDA no formato exigido somente após os critérios. Etapa 3 permanece fora deste plano.
 
 ## Revisão do plano
 
 Spec coberta pelas duas tarefas; arquivo open_meteo.py compartilhado sequencialmente. Os cinco riscos têm testes específicos. Nenhum novo serviço da infraestrutura. Execução escolhida pelo usuário: agentes Luna Max; plano aprovado em 2026-10-07; execução iniciada.
+
+## Resultado verificado
+
+Execução concluída em2026-10-07. Principal:291passed/1skip offline, Ruff aprovado e1passed live emPython3.11.14. Revisões por tarefa/final aprovadas após as correções documentadas no progresso. Etapa3 não iniciada. Commit local inicial do contrato:bbaf1fd.

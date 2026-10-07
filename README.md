@@ -1,6 +1,6 @@
 # Climate Logistics Streaming Platform
 
-Fundação local de uma plataforma de logística climática: Kafka transportará eventos, Flink fará o processamento e PostgreSQL armazenará resultados de negócio. Nesta etapa há somente a infraestrutura e a estrutura Python; ainda não há produtor, tópicos, jobs Flink, tabelas de negócio ou consumidor de alertas.
+Fundação local de uma plataforma de logística climática: Kafka transportará eventos, Flink fará o processamento e PostgreSQL armazenará resultados de negócio. Nesta etapa há infraestrutura, contrato de eventos e um cliente síncrono da Open-Meteo. Ainda não há produtor, tópicos, jobs Flink, tabelas de negócio ou consumidor de alertas.
 
 ## Requisitos e recursos
 
@@ -63,20 +63,68 @@ SELECT has_schema_privilege(current_user, 'climate', 'USAGE') AS acesso_ao_schem
 
 Saia com `\q`. O bootstrap concede `CONNECT` ao banco e `USAGE` no schema `climate`; tabelas e privilégios de escrita entram em uma etapa posterior.
 
+## Cliente Open-Meteo
+
+O pacote Python fica em src e ainda não é instalado como wheel. Defina PYTHONPATH antes de importar o cliente:
+
+~~~powershell
+$env:PYTHONPATH = Join-Path (Get-Location) 'src'
+~~~
+
+~~~sh
+export PYTHONPATH=src
+~~~
+
+O cliente síncrono consulta https://api.open-meteo.com/v1/forecast para uma localidade por chamada. Use as localidades configuradas e feche a sessão com o context manager:
+
+~~~python
+from climate_logistics.locations import LOCATIONS
+from climate_logistics.open_meteo import OpenMeteoClient
+
+with OpenMeteoClient() as client:
+    event = client.fetch(LOCATIONS[0])
+
+print(event.to_dict())
+~~~
+
+A resposta usa o bloco current e mantém as coordenadas da localidade configurada no evento. event_timestamp indica a validade do dado e ingestion_timestamp registra quando a resposta terminou de ser recebida. Os valores vêm de modelos meteorológicos, não de observações de estação. A precipitação é acumulada no intervalo informado pela fonte; measurement_interval_seconds registra esse intervalo.
+
+| Campo Open-Meteo | Campo no evento | Unidade |
+| --- | --- | --- |
+| temperature_2m | temperature | °C |
+| precipitation | precipitation | mm |
+| wind_speed_10m | wind_speed | km/h |
+| wind_gusts_10m | wind_gust | km/h |
+| visibility | visibility | m |
+| weather_code | weather_code | código WMO |
+
+O cliente solicita UTC e timestamp Unix; o evento é serializado em ISO 8601 UTC terminado em Z. Intervalos aceitos vão de 1 a 3600 segundos. O contrato valida valores, campos e unidades, e rejeita respostas inválidas em vez de substituir dados ausentes por zero.
+
+O transporte usa TLS verificado, não segue redirects, limita cada resposta a 128 KiB descomprimidos e faz até três tentativas para timeout/conexão transitória, HTTP 429 e HTTP 500/502/503/504. Em 429, um Retry-After numérico é limitado a cinco segundos; cabeçalhos ausentes, inválidos ou em formato de data usam o backoff local. Os timeouts de Requests são 3 segundos para conexão e 10 segundos de inatividade de leitura. Eles não representam um prazo total absoluto para a operação.
+
 ## Python e qualidade
 
-A estrutura e os serviços Python futuros usam Python 3.11. Crie um ambiente virtual e instale somente as ferramentas de desenvolvimento:
+A estrutura e os serviços Python futuros usam Python 3.11. Crie um ambiente virtual e instale as dependências fixadas:
 
-```powershell
+~~~powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt
 python -m ruff check .
 python -m pytest
-```
+~~~
 
-Ruff e Pytest estão fixados em `requirements-dev.txt`. A suíte começa vazia de propósito; até que cenários reais sejam adicionados, Pytest pode sair com código 5 por não encontrar testes. Isso não conta como testes aprovados. Os marcadores `unit` e `integration` já estão registrados para as etapas seguintes.
+No Linux, crie/ative o ambiente com python3.11 -m venv .venv e source .venv/bin/activate. A suíte padrão é offline e o smoke live é pulado explicitamente. Os testes HTTP usam um servidor local no loopback.
 
+Para executar a consulta real de RJ01, habilite o smoke apenas nessa execução:
+
+~~~powershell
+$env:OPEN_METEO_LIVE = "1"
+python -m pytest tests/integration/test_open_meteo_live.py -q
+Remove-Item Env:OPEN_METEO_LIVE
+~~~
+
+No Linux, use OPEN_METEO_LIVE=1 python -m pytest tests/integration/test_open_meteo_live.py -q.
 ## Persistência e próximos passos
 
 Os dados de Kafka e PostgreSQL ficam nos volumes nomeados `kafka-data` e `postgres-data`. Para parar os containers e preservar os dados:

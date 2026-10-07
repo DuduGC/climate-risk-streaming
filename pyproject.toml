@@ -13,4 +13,5 @@ pythonpath = ["src"]
 markers = [
     "unit: testes unitários sem dependência de serviços externos",
     "integration: testes que exercitam integração com serviços externos",
+    "live: smoke tests opt-in que acessam serviços externos",
 ]

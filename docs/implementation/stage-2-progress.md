@@ -26,3 +26,9 @@ Task 1: fix round1 — P2 datetime aware cujo offset sai do domínio UTC; quatro
 
 Task 1: complete — 245 passed, Ruff aprovado no principal, revisão scoped aprovada, P2 UTC resolvido.
 Task 2: implementador stage2_http despachado; contrato preservado.
+
+Task 2: baseline principal289 passed,1live skip; Ruff I001 imports em acabamento.
+Final review: doisP2 — exceptions JSON complexidade fora OpenMeteoError (ValueError/RecursionError) e README PYTHONPATH ausente. Uma onda de correções encaminhada ao implementador.
+
+Task 2: complete — principal291passed1skipRuff0; smoke público1passed; scoped reviewaprovada,2P2resolvidos.
+Etapa 2: complete,sem avanço para Etapa3.
