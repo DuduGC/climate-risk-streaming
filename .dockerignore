@@ -1,0 +1,51 @@
+# Secrets and local environment files. Keep the template available to builds.
+.env
+.env.*
+*.env
+*.env.*
+!/.env.example
+
+# Repository metadata and local tooling state.
+.git/
+.docker/
+.credentials/
+credentials/
+secrets/
+.venv/
+venv/
+env/
+ENV/
+.tox/
+.nox/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Content that is not needed inside application image build contexts.
+docs/
+tests/
+logs/
+*.log
+*.tmp
+*.swp
+*~
+README.md
+compose.yaml
+requirements-dev.txt
+.gitignore
+
+# Local credential material.
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519

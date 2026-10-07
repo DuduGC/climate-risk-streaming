@@ -1,0 +1,121 @@
+name: climate-logistics
+
+services:
+  kafka:
+    image: apache/kafka:3.9.1
+    hostname: kafka
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_LOG_RETENTION_HOURS: "24"
+      KAFKA_LOG_RETENTION_BYTES: "1073741824"
+      KAFKA_LOG_SEGMENT_BYTES: "268435456"
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: "300000"
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092 >/dev/null 2>&1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  flink-jobmanager:
+    image: flink:1.20.3-scala_2.12-java17
+    hostname: flink-jobmanager
+    command: jobmanager
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      FLINK_PROPERTIES: |-
+        jobmanager.rpc.address: flink-jobmanager
+        rest.address: flink-jobmanager
+        jobmanager.memory.process.size: 768m
+        parallelism.default: 1
+        taskmanager.numberOfTaskSlots: 1
+    ports:
+      - 127.0.0.1:8081:8081
+    volumes:
+      - ./docker/flink/healthcheck.sh:/usr/local/bin/flink-healthcheck.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "sh /usr/local/bin/flink-healthcheck.sh jobmanager"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+  flink-taskmanager:
+    image: flink:1.20.3-scala_2.12-java17
+    hostname: flink-taskmanager
+    command: taskmanager
+    restart: unless-stopped
+    mem_limit: 1536m
+    cpus: 1.0
+    environment:
+      FLINK_JOBMANAGER_REST_URL: http://flink-jobmanager:8081
+      FLINK_PROPERTIES: |-
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.host: flink-taskmanager
+        taskmanager.memory.process.size: 1280m
+        taskmanager.numberOfTaskSlots: 1
+        parallelism.default: 1
+    volumes:
+      - ./docker/flink/healthcheck.sh:/usr/local/bin/flink-healthcheck.sh:ro
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, "sh /usr/local/bin/flink-healthcheck.sh taskmanager"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+  postgres:
+    image: postgres:17.11-bookworm
+    hostname: postgres
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no arquivo .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no arquivo .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      APP_DB_USER: ${APP_DB_USER:?Defina APP_DB_USER no arquivo .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Defina APP_DB_PASSWORD no arquivo .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/01-bootstrap.sh:/docker-entrypoint-initdb.d/01-bootstrap.sh:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -h 127.0.0.1 -p 5432 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  kafka-data:
+  postgres-data:

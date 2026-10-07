@@ -1,0 +1,16 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+minversion = "8.4"
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "unit: testes unitários sem dependência de serviços externos",
+    "integration: testes que exercitam integração com serviços externos",
+]

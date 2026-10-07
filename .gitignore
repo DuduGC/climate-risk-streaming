@@ -1,0 +1,46 @@
+# Secrets and local environment files. Keep the committed template.
+.env
+.env.*
+*.env
+*.env.*
+!/.env.example
+
+# Virtual environments and Python tooling.
+.venv/
+venv/
+env/
+ENV/
+.tox/
+.nox/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary files.
+logs/
+*.log
+*.tmp
+*.swp
+*~
+
+# Local credentials and Docker client configuration.
+.docker/
+.credentials/
+credentials/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
