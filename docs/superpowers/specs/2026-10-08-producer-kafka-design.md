@@ -1,6 +1,6 @@
 # Etapa 3 — Python Producer + Kafka
 
-Status: proposta para revisão em 2026-10-08. Etapas 1 e 2 concluídas; Git limpo na inspeção inicial.
+Status: especificação aprovada pelo usuário em 2026-10-08; plano e implementação pendentes. Etapas 1 e 2 concluídas; Git limpo na inspeção inicial.
 
 ## Objetivo e escopo
 
