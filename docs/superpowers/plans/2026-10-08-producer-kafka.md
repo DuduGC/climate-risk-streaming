@@ -43,41 +43,41 @@ Principal: docs/progresso.md e docs/implementation/stage-3-* (brief, ledger, rel
 
 ## Preparação — principal
 
-- [ ] Confirmar base 4acfd3d e branch foundation; manter checkout autorizado e preservar dados.
-- [ ] Criar ledger stage-3-progress.md e brief desta tarefa; registrar aprovação do plano quando concedida.
-- [ ] Confirmar Docker Linux/Python 3.11; verificar instalação SDK após aprovação. Delegar toda a implementação a um Luna Max, sem disputa de arquivos.
+- [x] Confirmar base efdd57e e branch foundation; manter checkout autorizado e preservar dados.
+- [x] Criar ledger stage-3-progress.md e brief desta tarefa; registrar aprovação do plano quando concedida.
+- [x] Confirmar Docker Linux/Python 3.11; verificar instalação SDK após aprovação. Delegar toda a implementação a um Luna Max, sem disputa de arquivos.
 
 ## Tarefa única — Producer verificável
 
-- [ ] TDD: testes antes da lógica; observar RED e GREEN. Preservar os 291 testes existentes, sem duplicar validação da Etapa 2.
-- [ ] Serialização: JSON/key/acentos/timestamps exatos; limite16 KiB inclusivo, excesso rejeitado antes de enqueue.
-- [ ] Config: defaults, intervalo inteiro de 1 a 86400; rejeitar vazio/zero/negativo/fração/texto; bootstrap não vazio e sem URI/credencial/whitespace inválido, sem imprimir valores.
-- [ ] Topics: 3 partições/RF1, existentes compatíveis, TOPIC_ALREADY_EXISTS com conferência, erro e timeout; deadline de 15 s compartilhado por chamadas/futures, não 15 s por topic.
-- [ ] Publisher: callbacks sucesso/erro, nack servido por poll, flush pendente, flush0 sem callback, mensagens com mesma identidade lógica. Sucesso de enqueue não equivale a entregue.
-- [ ] Queue BufferError: poll limitado pelo tempo restante, retry até 5 s usando monotonic; teste relógio que avança. Não re-enviar manualmente após timeout ambíguo de delivery.
-- [ ] Ciclo: erro HTTP/contrato de uma localidade não impede restantes; publicar só válidos, flush confirmado; retornar false se parcial. Kafka fatal encerra. Sem retry HTTP adicional.
-- [ ] StopEvent: parar novas coletas, Event.wait interrompe intervalo; fechar HTTP e flush final em finally sem mascarar erro. --once exit 0 só para ciclo completo; demais falhas exit 1. Parada intencional contínua exit 0 se mensagens aceitas drenadas.
-- [ ] Logs JSON stdlib: timestamp UTC/component/operation/status e contexto útil. Testar JSON parseável, contagens por confirmação, sem secrets/body inteiro/log de enqueue como sucesso.
-- [ ] Implementar interfaces mínimas, publisher/session reutilizados por execução; logs por ciclo/falhas, sem framework extra.
-- [ ] Dockerfile FROM python:3.11.14-slim-bookworm, deps runtime, src, PYTHONPATH=/app/src, UID/GID10001 e CMD exec Python; sem .env/dev deps.
-- [ ] Compose producer image climate-logistics-producer:local, build contexto raiz/Dockerfile definido, mem_limit=256m/cpus=0.5, depende do Kafka healthy. Environment só bootstrap/poll/PYTHONUNBUFFERED/PYTHONPATH; não env_file=.env. .env.example só acrescenta defaults públicos.
-- [ ] Kafka real opt-in KAFKA_INTEGRATION=1: capture high watermarks antes de publicar fixture com location_id único; consume via assign/offsets sem commits/grupos operacionais; confira key/value/CreateTime/entrega. Sem topic extra/reset/remover dados.
-- [ ] Caso SDK real contra endpoint local fechado: falha de entrega explícita e prazo limitado, sem parar o broker existente.
-- [ ] Smoke com KAFKA_INTEGRATION=1 e OPEN_METEO_LIVE=1: producer contínuo parado, offsets capturados, CLI --once em subprocess timeout de 180 s, consumo dos 3 registros novos com ingestion_timestamp dentro do ciclo. Logs sozinhos não comprovam.
-- [ ] Integrações skip explícito por padrão, markers integration/live; fixture/rede pública em funções separadas.
-- [ ] README: build/up/--once/logs, bootstrap interno, inspeção temporária, schema/timestamps, duplicações esperadas entre polls/reinícios e limites. Idempotência de sessão não é exactly-once; HTTP sem deadline absoluto.
-- [ ] Rodar suíte inteira Python 3.11 e Ruff; registrar RED/GREEN/contagens/status em stage-3-implementation-report.md.
+- [x] TDD: testes antes da lógica; observar RED e GREEN. Preservar os 291 testes existentes, sem duplicar validação da Etapa 2.
+- [x] Serialização: JSON/key/acentos/timestamps exatos; limite16 KiB inclusivo, excesso rejeitado antes de enqueue.
+- [x] Config: defaults, intervalo inteiro de 1 a 86400; rejeitar vazio/zero/negativo/fração/texto; bootstrap não vazio e sem URI/credencial/whitespace inválido, sem imprimir valores.
+- [x] Topics: 3 partições/RF1, existentes compatíveis, TOPIC_ALREADY_EXISTS com conferência, erro e timeout; deadline de 15 s compartilhado por chamadas/futures, não 15 s por topic.
+- [x] Publisher: callbacks sucesso/erro, nack servido por poll, flush pendente, flush0 sem callback, mensagens com mesma identidade lógica. Sucesso de enqueue não equivale a entregue.
+- [x] Queue BufferError: poll limitado pelo tempo restante, retry até 5 s usando monotonic; teste relógio que avança. Não re-enviar manualmente após timeout ambíguo de delivery.
+- [x] Ciclo: erro HTTP/contrato de uma localidade não impede restantes; publicar só válidos, flush confirmado; retornar false se parcial. Kafka fatal encerra. Sem retry HTTP adicional.
+- [x] StopEvent: parar novas coletas, Event.wait interrompe intervalo; fechar HTTP e flush final em finally sem mascarar erro. --once exit 0 só para ciclo completo; demais falhas exit 1. Parada intencional contínua exit 0 se mensagens aceitas drenadas.
+- [x] Logs JSON stdlib: timestamp UTC/component/operation/status e contexto útil. Testar JSON parseável, contagens por confirmação, sem secrets/body inteiro/log de enqueue como sucesso.
+- [x] Implementar interfaces mínimas, publisher/session reutilizados por execução; logs por ciclo/falhas, sem framework extra.
+- [x] Dockerfile FROM python:3.11.14-slim-bookworm, deps runtime, src, PYTHONPATH=/app/src, UID/GID10001 e CMD exec Python; sem .env/dev deps.
+- [x] Compose producer image climate-logistics-producer:local, build contexto raiz/Dockerfile definido, mem_limit=256m/cpus=0.5, depende do Kafka healthy. Environment só bootstrap/poll/PYTHONUNBUFFERED/PYTHONPATH; não env_file=.env. .env.example só acrescenta defaults públicos.
+- [x] Kafka real opt-in KAFKA_INTEGRATION=1: capture high watermarks antes de publicar fixture com location_id único; consume via assign/offsets sem commits/grupos operacionais; confira key/value/CreateTime/entrega. Sem topic extra/reset/remover dados.
+- [x] Caso SDK real contra endpoint local fechado: falha de entrega explícita e prazo limitado, sem parar o broker existente.
+- [x] Smoke com KAFKA_INTEGRATION=1 e OPEN_METEO_LIVE=1: producer contínuo parado, offsets capturados, CLI --once em subprocess timeout de 180 s, consumo dos 3 registros novos com ingestion_timestamp dentro do ciclo. Logs sozinhos não comprovam.
+- [x] Integrações skip explícito por padrão, markers integration/live; fixture/rede pública em funções separadas.
+- [x] README: build/up/--once/logs, bootstrap interno, inspeção temporária, schema/timestamps, duplicações esperadas entre polls/reinícios e limites. Idempotência de sessão não é exactly-once; HTTP sem deadline absoluto.
+- [x] Rodar suíte inteira Python 3.11 e Ruff; registrar RED/GREEN/contagens/status em stage-3-implementation-report.md.
 
 ## Revisão e aceite — principal
 
-- [ ] Revisão independente inteira: deadlines/callbacks/signals/configs/Docker/secrets/testes. Corrigir achados com mesmo implementador.
-- [ ] requirements runtime/dev; python -m pytest -q e python -m ruff check . em Python 3.11: exit 0 e skips opt-in claros.
-- [ ] docker compose config --quiet; build producer; startup topics idempotente; metadata confirma3partições/RF1.
-- [ ] Testes Kafka fixture/negativo no network climate-logistics_default, depois smoke API→CLI→Kafka com consumo validado.
-- [ ] Subir producer contínuo, confirmar um ciclo, testar parada limpa e restaurar operação. Conferir não-root, sem secrets PostgreSQL e sem porta adicional.
-- [ ] git diff --check, scan secrets sem exibir valores; atualizar progresso/ledger/spec/plano e commit local, sem publicação.
-- [ ] Reportar ETAPA 3 CONCLUÍDA somente após critérios; Etapa 4 não iniciada.
+- [x] Revisão independente inteira: deadlines/callbacks/signals/configs/Docker/secrets/testes. Corrigir achados com mesmo implementador.
+- [x] requirements runtime/dev; python -m pytest -q e python -m ruff check . em Python 3.11: exit 0 e skips opt-in claros.
+- [x] docker compose config --quiet; build producer; startup topics idempotente; metadata confirma3partições/RF1.
+- [x] Testes Kafka fixture/negativo no network climate-logistics_default, depois smoke API→CLI→Kafka com consumo validado.
+- [x] Subir producer contínuo, confirmar um ciclo, testar parada limpa e restaurar operação. Conferir não-root, sem secrets PostgreSQL e sem porta adicional.
+- [x] git diff --check, scan secrets sem exibir valores; atualizar progresso/ledger/spec/plano e commit local, sem publicação.
+- [x] Reportar ETAPA 3 CONCLUÍDA somente após critérios; Etapa 4 não iniciada.
 
 ## Revisão do plano
 
-Spec coberta; entrega única evita disputa de interfaces. Os cinco riscos têm testes acima, schema preservado e nenhuma stack extra. Método já escolhido: Luna Max implementa e principal/revisor validam. Aprovação deste plano pendente.
+Spec coberta; entrega única evita disputa de interfaces. Os cinco riscos têm testes acima, schema preservado e nenhuma stack extra. Método já escolhido: Luna Max implementa e principal/revisor validam. Plano aprovado pelo usuário em 2026-10-08; execução concluída e verificada; evidências em docs/progresso.md.

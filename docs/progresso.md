@@ -6,7 +6,8 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 
 - Etapa 1: concluída; implementação, revisão e critérios de infraestrutura aprovados em 2026-10-07.
 - Etapa 2: concluída; critérios e revisão aprovados em 2026-10-07.
-- Etapas 3–10: pendentes.
+- Etapa 3: concluída; revisão e critérios aprovados em 2026-10-08.
+- Etapas 4–10: pendentes.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Git inicializado na branch `foundation`.
 - Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
@@ -97,4 +98,27 @@ Limitações:
 - Python 3.11 é o ambiente de referência dos testes. Revisão de código não substitui a execução nessa versão.
 - Nenhum polling, Producer, topic Kafka, job Flink, sink ou serviço novo foi antecipado.
 
-Próxima etapa: Etapa 3 — Python Producer + Kafka. Ainda não iniciada.
+Etapa 3 em execução. Ledger: docs/implementation/stage-3-progress.md.
+
+## Etapa 3 — Python Producer + Kafka concluída
+
+Implementação por GPT-6 Luna Max; revisão independente e validação pelo principal em 2026-10-08.
+
+Implementado: publisher com confirmação de delivery, startup idempotente dos topics, CLI contínua/--once, logs JSON, container Producer não-root e configuração pública separada dos secrets PostgreSQL.
+
+Evidências do principal:
+- Python 3.11.14: 329 passed, 4 skipped em 6,02 s; Ruff aprovado.
+- Kafka real: fixture, falha do SDK contra porta fechada e API→CLI→Kafka com consumo verificado: 3 passed em 13,30 s.
+- weather.raw e weather.alerts: três partições, replicação 1, líder/ISR ativos em todas.
+- Build final aprovado. Container coleta, aceita e confirma três eventos por ciclo.
+- UID/GID 10001; nenhuma variável POSTGRES_/APP_DB_ no Producer; sem porta publicada.
+- Parada SIGTERM: exit 0 em cerca de 1,06 s. Após reinício, topics existentes reconhecidos e novo ciclo de três entregas confirmado.
+- weather.alerts permanece vazio: offsets 0 nas três partições.
+- Memória observada do Producer: cerca de 25,5 MiB no limite de 256 MiB; medição de um ciclo pequeno, não benchmark de throughput.
+- Revisão scoped: cinco achados resolvidos, sem pendências.
+
+Problemas corrigidos: validação de metadata dos topics existentes; logs INFO da CLI; comando Docker --once; retry depois do deadline; contagem de ACKs em lote parcialmente falho. Observer de testes passou a atualizar metadata/repetir somente erros transitórios sob deadline de 15 s após erro NOT_LEADER_FOR_PARTITION no primeiro startup.
+
+Limites: idempotência Kafka dentro da sessão não elimina duplicações de negócio entre polls/reinícios; deduplicação na Etapa 5. Dados meteorológicos modelados e intervalo da precipitação preservados. Sem HA/TLS/SASL/ACL no broker local.
+
+Producer contínuo deixado em execução. Nenhum volume, topic ou registro foi removido. Próxima etapa: Etapa 4 — Kafka → Flink, ainda não iniciada.

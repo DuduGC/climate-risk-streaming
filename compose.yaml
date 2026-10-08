@@ -116,6 +116,24 @@ services:
       retries: 10
       start_period: 20s
 
+  producer:
+    image: climate-logistics-producer:local
+    build:
+      context: .
+      dockerfile: docker/producer/Dockerfile
+    restart: on-failure:3
+    mem_limit: 256m
+    cpus: 0.5
+    stop_grace_period: 75s
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      WEATHER_POLL_INTERVAL_SECONDS: ${WEATHER_POLL_INTERVAL_SECONDS:-300}
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app/src
+    depends_on:
+      kafka:
+        condition: service_healthy
+
 volumes:
   kafka-data:
   postgres-data:

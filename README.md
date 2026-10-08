@@ -1,14 +1,15 @@
 # Climate Logistics Streaming Platform
 
-Fundação local de uma plataforma de logística climática: Kafka transportará eventos, Flink fará o processamento e PostgreSQL armazenará resultados de negócio. Nesta etapa há infraestrutura, contrato de eventos e um cliente síncrono da Open-Meteo. Ainda não há produtor, tópicos, jobs Flink, tabelas de negócio ou consumidor de alertas.
+Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink fará o processamento e PostgreSQL armazenará resultados de negócio. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em weather.raw. Ainda não há jobs Flink, tabelas de negócio ou consumidor de alertas.
 
 ## Requisitos e recursos
 
-Use Docker Engine com suporte a containers Linux e Docker Compose v2, ou Docker Desktop configurado para containers Linux. Reserve ao menos 6 GiB de memória para o Docker e cerca de 4 vCPUs: os limites dos quatro containers somam 4 GiB (Kafka 1 GiB, JobManager 1 GiB, TaskManager 1,5 GiB e PostgreSQL 512 MiB), além do sistema e do próprio Docker.
+Use Docker Engine com suporte a containers Linux e Docker Compose v2, ou Docker Desktop configurado para containers Linux. Reserve ao menos 6 GiB de memória para o Docker e cerca de 4 vCPUs: os limites dos cinco containers somam cerca de 4,25 GiB (Kafka 1 GiB, JobManager 1 GiB, TaskManager 1,5 GiB, PostgreSQL 512 MiB e Producer 256 MiB), além do sistema e do próprio Docker.
 
 | Serviço | Imagem | Recurso máximo | Acesso e persistência |
 | --- | --- | --- | --- |
 | Kafka | `apache/kafka:3.9.1` | 1 GiB; heap 512 MiB | Rede Docker em `kafka:9092`; volume `kafka-data` |
+| Producer | python:3.11.14-slim-bookworm | 256 MiB; 0,5 vCPU | Rede Docker em kafka:9092; sem porta própria |
 | Flink JobManager | `flink:1.20.3-scala_2.12-java17` | 1 GiB; processo 768 MiB | Console REST em `http://127.0.0.1:8081` |
 | Flink TaskManager | `flink:1.20.3-scala_2.12-java17` | 1,5 GiB; processo 1280 MiB | 1 slot; paralelismo padrão 1 |
 | PostgreSQL | `postgres:17.11-bookworm` | 512 MiB | Rede Docker em `postgres:5432`; volume `postgres-data` |
@@ -32,7 +33,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Espere os quatro serviços mostrarem `healthy` em `docker compose ps`. O healthcheck do Flink valida a API REST e o registro do TaskManager.
+Espere Kafka, os dois serviços Flink e PostgreSQL mostrarem `healthy` em `docker compose ps`. O Producer aparece como `running`; acompanhe suas entregas pelos logs. O healthcheck do Flink valida a API REST e o registro do TaskManager.
 
 ## Verificar os serviços
 
@@ -102,6 +103,40 @@ O cliente solicita UTC e timestamp Unix; o evento é serializado em ISO 8601 UTC
 
 O transporte usa TLS verificado, não segue redirects, limita cada resposta a 128 KiB descomprimidos e faz até três tentativas para timeout/conexão transitória, HTTP 429 e HTTP 500/502/503/504. Em 429, um Retry-After numérico é limitado a cinco segundos; cabeçalhos ausentes, inválidos ou em formato de data usam o backoff local. Os timeouts de Requests são 3 segundos para conexão e 10 segundos de inatividade de leitura. Eles não representam um prazo total absoluto para a operação.
 
+## Producer Python e Kafka
+
+O container Producer consulta RJ01, SP01 e CT01 em sequência, valida os eventos com o contrato existente e publica somente respostas válidas em weather.raw. O bootstrap cria weather.raw e weather.alerts quando ausentes, cada um com três partições e replicação 1; tópicos existentes com topologia incompatível interrompem o startup sem alteração destrutiva. weather.alerts permanece vazio nesta etapa.
+
+O padrão é KAFKA_BOOTSTRAP_SERVERS=kafka:9092 e WEATHER_POLL_INTERVAL_SECONDS=300. O Producer usa somente configuração pública e não recebe credenciais PostgreSQL. Para compilar e iniciar o serviço contínuo:
+
+~~~powershell
+docker compose build producer
+docker compose up -d producer
+docker compose logs -f producer
+~~~
+
+Execute um único ciclo verificável em outra janela. O comando retorna zero apenas quando as três localidades foram coletadas e cada entrega recebeu confirmação do broker:
+
+~~~powershell
+docker compose run --rm --no-deps producer python -m climate_logistics.producer --once
+~~~
+
+Confira a topologia criada pelo serviço:
+
+~~~powershell
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --describe --topic weather.raw
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --describe --topic weather.alerts
+~~~
+
+Para uma inspeção temporária, comece a consumir a partir do offset mais recente em uma partição e execute --once em outra janela:
+
+~~~powershell
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic weather.raw --partition 0 --offset latest --timeout-ms 5000 --max-messages 1
+~~~
+
+A chave Kafka é location_id em UTF-8. O valor é o JSON compacto do WeatherEvent, sem campos adicionais, limitado a 16 KiB. event_timestamp conserva o horário do dado meteorológico; ingestion_timestamp registra a recepção HTTP e também define o CreateTime Kafka em milissegundos. O log JSON registra entregas confirmadas por callback, falhas e um resumo por ciclo sem incluir o corpo HTTP.
+
+A idempotência do cliente reduz duplicações de retry na mesma sessão. Polls sucessivos e reinícios podem publicar novamente o mesmo dado lógico; não há deduplicação de negócio nesta etapa. Uma falha HTTP em uma localidade deixa as outras tentarem publicar, e o ciclo fica parcial. O Producer usa os timeouts de conexão/leitura HTTP já definidos pelo cliente; eles não garantem um prazo total absoluto. SIGTERM e SIGINT interrompem ciclos novos e iniciam flush limitado a 12 segundos.
 ## Python e qualidade
 
 A estrutura e os serviços Python futuros usam Python 3.11. Crie um ambiente virtual e instale as dependências fixadas:
@@ -135,4 +170,4 @@ docker compose stop
 
 O script de bootstrap do PostgreSQL executa somente quando `postgres-data` está vazio. Alterar uma senha no `.env` não muda a senha de uma role que já existe; atualize-a no banco com uma sessão administrativa. O mesmo vale para as credenciais iniciais do banco.
 
-Conforme o planejamento, a Etapa 3 criará explicitamente os tópicos `weather.raw` e `weather.alerts`, cada um com três partições; a criação automática está desativada agora. A Etapa 4 adicionará PyFlink e os conectores Kafka/JDBC. Etapas posteriores implementarão ingestão, processamento, persistência de negócio no schema `climate` e consumo de alertas. Nenhum desses tópicos, componentes ou tabelas está presente nesta fundação.
+A Etapa 3 criou os tópicos weather.raw e weather.alerts com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionará o job Flink e os conectores Kafka/JDBC. Etapas posteriores tratarão persistência de negócio no schema climate e consumo de alertas.
