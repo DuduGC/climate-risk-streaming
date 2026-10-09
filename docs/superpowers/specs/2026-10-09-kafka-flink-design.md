@@ -1,6 +1,6 @@
 # Etapa 4 — Kafka → Flink
 
-Status: especificação aprovada pelo usuário em 2026-10-09; plano/implementação pendentes. Etapas 1–3 concluídas; repositório limpo na inspeção inicial. Containers estavam parados, sem alteração de dados nesta preparação.
+Status: especificação aprovada pelo usuário em 2026-10-09; plano aprovado; Etapa 4 implementada/verificada. Evidências em docs/progresso.md. Etapas 1–3 concluídas; repositório limpo na inspeção inicial. Containers estavam parados, sem alteração de dados nesta preparação.
 
 ## Objetivo e escopo
 

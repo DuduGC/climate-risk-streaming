@@ -51,45 +51,45 @@ Principal: docs/progresso.md e docs/implementation/stage-4-* (brief, ledger, rep
 
 ## Preparação — principal
 
-- [ ] Registrar aprovação deste plano e base 846ceb5 e branch foundation; manter checkout autorizado.
-- [ ] Criar brief e ledger exclusivos da Etapa 4. Confirmar infraestrutura/jobs antes de executar, sem apagar volumes.
-- [ ] Delegar uma entrega a Luna Max; principal prepara builds/QA em paralelo sem disputar arquivos.
+- [x] Registrar aprovação deste plano e base c6b07a5 e branch foundation; manter checkout autorizado.
+- [x] Criar brief e ledger exclusivos da Etapa 4. Confirmar infraestrutura/jobs antes de executar, sem apagar volumes.
+- [x] Delegar uma entrega a Luna Max; principal prepara builds/QA em paralelo sem disputar arquivos.
 
 ## Tarefa única — runtime e primeiro job
 
-- [ ] TDD parser: RED antes da lógica, GREEN com fixture de evento normalizado existente; não duplicar matriz inteira dos modelos.
-- [ ] Testar todos campos, ordem e tipos, UTC de timestamps com offset, JSON/schema/version inválidos, corpo acima16KiB, inteiro enorme/nesting e string não representável em UTF8. Erros devem ser WeatherParseError sem expor corpo.
-- [ ] Parser exige campos do wire schema incluindo source/version/interval; não preencher defaults silenciosos. Tratar somente exceções conhecidas de decode/contrato; preservar erros de programação.
-- [ ] event_values e diagnostic_summary são puros. Testar tupla esperada completa e JSON de diagnóstico com campos exatos; sem imprimir medições completas.
-- [ ] Runtime multi-stage FROM flink:1.20.3-scala_2.12-java17: builder instala deps de compilação, baixa/verifica CPython, configura prefix=/opt/python3.11, enable-shared/ensurepip, sem PGO/LTO, make paralelo limitado.
-- [ ] Runtime recebe prefix compilado e somente libs necessárias (SSL/zlib/bzip2/sqlite/ffi/lzma/readline/gdbm/uuid conforme build). Registrar libpython via ldconfig/rpath; não copiar binário Debian incompatível nem usar PPA.
-- [ ] requirements-flink.txt contém apache-flink==1.20.3, sem runtime Producer/dev deps. Não adicionar pipeline Apache Beam: suas dependências são somente o runtime oficial PyFlink.
-- [ ] Baixar/verificar JAR e instalar só em /opt/flink/lib. Usar classpath global desse único JAR, sem duplicar via add_jars. Não instalar JDBC.
-- [ ] Copiar src para /opt/climate/src, configurar PYTHONPATH/PYTHONUNBUFFERED e executáveis /opt/python3.11/bin/python3.11. Preservar entrypoint oficial que inicia processos flink como usuário flink.
-- [ ] Compose JM/TM usa image climate-logistics-flink:local e mesmo build; manter comandos jobmanager/taskmanager, healthchecks/portas/recursos. Acrescentar python.client.executable/python.executable no FLINK_PROPERTIES de ambos, sem secrets PostgreSQL.
-- [ ] Job KafkaSource: tópico explícito, SimpleStringSchema, group configurado, KafkaOffsetsInitializer.earliest(), enable.auto.commit=false. --bounded usa set_bounded(KafkaOffsetsInitializer.latest()) para fim dos offsets disponíveis ao iniciar.
-- [ ] StreamExecutionEnvironment parallelism1, from_source com no_watermarks, nomes/UIDs estáveis para source/parser/diagnóstico. Não ativar checkpoint/state temporal.
-- [ ] FlatMap wrapper chama parser, incrementa parsed_records/invalid_records por metrics group, produz Row(*event_values) com Types.ROW_NAMED(WEATHER_FIELDS, tipos explícitos). WeatherParseError: log JSON mínimo e não emitir Row; demais erros propagam.
-- [ ] Map diagnóstico extrai valores da Row e usa diagnostic_summary; Types.STRING e PrintSink identificado weather-ingestion. Saída permite comprovar execução do Python.
-- [ ] README: build/up, submissão CLI usando usuário flink, inspeção REST/list/cancel por ID, limite de slot, evitar segundo job com mesmo nome, replay earliest sem checkpoint e teste bounded opt-in.
-- [ ] Integração FLINK_INTEGRATION=1: orquestrador de testes no host com Pytest/stdlib e subprocess Docker/REST local. Usar Docker exec para publicar pelo SDK já instalado no Producer e submeter pelo CLI do JM; payload por stdin/argumentos estruturados, sem shell interpolado. Nenhum Docker SDK/socket adicional. O host controla a operação; parser e job executam obrigatoriamente em Python 3.11 no runtime Flink.
-- [ ] Antes do teste, listar jobs: se há job operacional identificado, coordenar cancelamento temporário e restaurar; não cancelar jobs desconhecidos. Publicar raw inválido e fixture válida com ID exclusivo usando SDKKafka, aguardar confirmação.
-- [ ] Submeter bounded com nome/group exclusivos, capturar jobID real da resposta/CLI; deadline240s para FINISHED, falhar em FAILED/CANCELED/timeout. Encontrar diagnóstico da fixture nos logs TM após timestamp de início e evidência de invalid_records/log controlado. Não aceitar somente numRecordsOut.
-- [ ] Teste bounded sempre limpa somente seu job ainda ativo via cancel porID, sem reset de offsets/remoção de dados. Integração skip explícito por padrão; nenhum shell destrutivo ou fixture descartando raw histórico.
-- [ ] Suíte completa leve e Ruff em Python 3.11; report RED/GREEN/contagens/concerns em stage-4-implementation-report.md. Build e integração real feitos pelo principal, sem declarar etapa concluída por unitários.
+- [x] TDD parser: RED antes da lógica, GREEN com fixture de evento normalizado existente; não duplicar matriz inteira dos modelos.
+- [x] Testar todos campos, ordem e tipos, UTC de timestamps com offset, JSON/schema/version inválidos, corpo acima16KiB, inteiro enorme/nesting e string não representável em UTF8. Erros devem ser WeatherParseError sem expor corpo.
+- [x] Parser exige campos do wire schema incluindo source/version/interval; não preencher defaults silenciosos. Tratar somente exceções conhecidas de decode/contrato; preservar erros de programação.
+- [x] event_values e diagnostic_summary são puros. Testar tupla esperada completa e JSON de diagnóstico com campos exatos; sem imprimir medições completas.
+- [x] Runtime multi-stage FROM flink:1.20.3-scala_2.12-java17: builder instala deps de compilação, baixa/verifica CPython, configura prefix=/opt/python3.11, enable-shared/ensurepip, sem PGO/LTO, make paralelo limitado.
+- [x] Runtime recebe prefix compilado e somente libs necessárias (SSL/zlib/bzip2/sqlite/ffi/lzma/readline/gdbm/uuid conforme build). Registrar libpython via ldconfig/rpath; não copiar binário Debian incompatível nem usar PPA.
+- [x] requirements-flink.txt contém apache-flink==1.20.3, sem runtime Producer/dev deps. Não adicionar pipeline Apache Beam: suas dependências são somente o runtime oficial PyFlink.
+- [x] Baixar/verificar JAR e instalar só em /opt/flink/lib. Usar classpath global desse único JAR, sem duplicar via add_jars. Não instalar JDBC.
+- [x] Copiar src para /opt/climate/src, configurar PYTHONPATH/PYTHONUNBUFFERED e executáveis /opt/python3.11/bin/python3.11. Preservar entrypoint oficial que inicia processos flink como usuário flink.
+- [x] Compose JM/TM usa image climate-logistics-flink:local e mesmo build; manter comandos jobmanager/taskmanager, healthchecks/portas/recursos. Acrescentar python.client.executable/python.executable no FLINK_PROPERTIES de ambos, sem secrets PostgreSQL.
+- [x] Job KafkaSource: tópico explícito, SimpleStringSchema, group configurado, KafkaOffsetsInitializer.earliest(), enable.auto.commit=false. --bounded usa set_bounded(KafkaOffsetsInitializer.latest()) para fim dos offsets disponíveis ao iniciar.
+- [x] StreamExecutionEnvironment parallelism1, from_source com no_watermarks, nomes/UIDs estáveis para source/parser/diagnóstico. Não ativar checkpoint/state temporal.
+- [x] FlatMap wrapper chama parser, incrementa parsed_records/invalid_records por metrics group, produz Row(*event_values) com Types.ROW_NAMED(WEATHER_FIELDS, tipos explícitos). WeatherParseError: log JSON mínimo e não emitir Row; demais erros propagam.
+- [x] Map diagnóstico extrai valores da Row e usa diagnostic_summary; Types.STRING e PrintSink identificado weather-ingestion. Saída permite comprovar execução do Python.
+- [x] README: build/up, submissão CLI usando usuário flink, inspeção REST/list/cancel por ID, limite de slot, evitar segundo job com mesmo nome, replay earliest sem checkpoint e teste bounded opt-in.
+- [x] Integração FLINK_INTEGRATION=1: orquestrador de testes no host com Pytest/stdlib e subprocess Docker/REST local. Usar Docker exec para publicar pelo SDK já instalado no Producer e submeter pelo CLI do JM; payload por stdin/argumentos estruturados, sem shell interpolado. Nenhum Docker SDK/socket adicional. O host controla a operação; parser e job executam obrigatoriamente em Python 3.11 no runtime Flink.
+- [x] Antes do teste, listar jobs: se há job operacional identificado, coordenar cancelamento temporário e restaurar; não cancelar jobs desconhecidos. Publicar raw inválido e fixture válida com ID exclusivo usando SDKKafka, aguardar confirmação.
+- [x] Submeter bounded com nome/group exclusivos, capturar jobID real da resposta/CLI; deadline240s para FINISHED, falhar em FAILED/CANCELED/timeout. Encontrar diagnóstico da fixture nos logs TM após timestamp de início e evidência de invalid_records/log controlado. Não aceitar somente numRecordsOut.
+- [x] Teste bounded sempre limpa somente seu job ainda ativo via cancel porID, sem reset de offsets/remoção de dados. Integração skip explícito por padrão; nenhum shell destrutivo ou fixture descartando raw histórico.
+- [x] Suíte completa leve e Ruff em Python 3.11; report RED/GREEN/contagens/concerns em stage-4-implementation-report.md. Build e integração real feitos pelo principal, sem declarar etapa concluída por unitários.
 
 ## Verificação final — principal
 
-- [ ] Review independente inteira de runtime/parser/graph/lifecycle/secrets; corrigir achados com implementador.
-- [ ] Builds JM/TM e compose config --quiet aprovados. Smoke de python3.11, ssl/ctypes/sqlite/bz2/lzma e versão PyFlink nos dois nós; Java17/conector presentes.
-- [ ] Confirmar processos não-root, TM registrado/slot, runtime sem credenciais PostgreSQL e Producer funcional após troca dos nós Flink.
-- [ ] Executar pytest inteiro e Ruff Python 3.11: exit0 e skip opt-in claro. SDK/jobs testados no runtime Flink real.
-- [ ] Integração bounded: inválido não causa crash; fixture aparece após parsing; FINISHED e slot livre.
-- [ ] Submeter job operacional unbounded, obter RUNNING e source/parser no REST; publicar novo evento válido identificado e encontrar diagnóstico. Medir RSS de worker/JVM; ajustar recursos somente se necessário e repetir checks afetados.
-- [ ] Deixar um único job weather-kafka-ingestion ativo ao final. Nenhum topic/registro/volume/grupo alheio removido.
-- [ ] git diff --check/scan secrets; atualizar progresso/spec/plano/ledger e commit local, sem publicar.
-- [ ] Reportar ETAPA 4 CONCLUÍDA após todos os critérios; Etapa 5 permanece pendente.
+- [x] Review independente inteira de runtime/parser/graph/lifecycle/secrets; corrigir achados com implementador.
+- [x] Builds JM/TM e compose config --quiet aprovados. Smoke de python3.11, ssl/ctypes/sqlite/bz2/lzma e versão PyFlink nos dois nós; Java17/conector presentes.
+- [x] Confirmar processos não-root, TM registrado/slot, runtime sem credenciais PostgreSQL e Producer funcional após troca dos nós Flink.
+- [x] Executar pytest inteiro e Ruff Python 3.11: exit0 e skip opt-in claro. SDK/jobs testados no runtime Flink real.
+- [x] Integração bounded: inválido não causa crash; fixture aparece após parsing; FINISHED e slot livre.
+- [x] Submeter job operacional unbounded, obter RUNNING e source/parser no REST; publicar novo evento válido identificado e encontrar diagnóstico. Medir RSS de worker/JVM; ajustar recursos somente se necessário e repetir checks afetados.
+- [x] Deixar um único job weather-kafka-ingestion ativo ao final. Nenhum topic/registro/volume/grupo alheio removido.
+- [x] git diff --check/scan secrets; atualizar progresso/spec/plano/ledger e commit local, sem publicar.
+- [x] Reportar ETAPA 4 CONCLUÍDA após todos os critérios; Etapa 5 permanece pendente.
 
 ## Revisão do plano
 
-Spec coberta por uma entrega coesa; os cinco riscos têm verificações reais. O schema preserva ordem/tipos explícitos e o parser reutiliza o modelo. Runtime separado e checksum fixado; sem nova stack ou etapa temporal antecipada. Método já escolhido: GPT-6 Luna Max implementa, principal/revisor validam. Aprovação deste plano pendente.
+Spec coberta por uma entrega coesa; os cinco riscos têm verificações reais. O schema preserva ordem/tipos explícitos e o parser reutiliza o modelo. Runtime separado e checksum fixado; sem nova stack ou etapa temporal antecipada. Método já escolhido: GPT-6 Luna Max implementa, principal/revisor validam. Plano aprovado em 2026-10-09; execução concluída/verificada; evidências em docs/progresso.md.

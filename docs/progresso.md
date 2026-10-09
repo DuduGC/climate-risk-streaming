@@ -7,7 +7,8 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 - Etapa 1: concluída; implementação, revisão e critérios de infraestrutura aprovados em 2026-10-07.
 - Etapa 2: concluída; critérios e revisão aprovados em 2026-10-07.
 - Etapa 3: concluída; revisão e critérios aprovados em 2026-10-08.
-- Etapas 4–10: pendentes.
+- Etapa 4: concluída; critérios/revisão aprovados em 2026-10-09.
+- Etapas 5–10: pendentes.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Git inicializado na branch `foundation`.
 - Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
@@ -122,3 +123,35 @@ Problemas corrigidos: validação de metadata dos topics existentes; logs INFO d
 Limites: idempotência Kafka dentro da sessão não elimina duplicações de negócio entre polls/reinícios; deduplicação na Etapa 5. Dados meteorológicos modelados e intervalo da precipitação preservados. Sem HA/TLS/SASL/ACL no broker local.
 
 Producer contínuo deixado em execução. Nenhum volume, topic ou registro foi removido. Próxima etapa: Etapa 4 — Kafka → Flink, ainda não iniciada.
+
+## Etapa 4 — Kafka → Flink concluída
+
+Implementação GPT-6 Luna Max; revisão independente e validação pelo principal em 2026-10-09.
+
+Implementado:
+- Runtime comum JM/TM: Flink/PyFlink 1.20.3, Java17, CPython3.11.14 compilado de fonte verificada e conector Kafka3.3.0-1.20 com SHA256 fixado.
+- KafkaSource weather.raw, earliest, auto-commit false, paralelismo1/no-watermarks; parser puro e Row tipada com15 campos.
+- Diagnóstico JSON/PrintSink e métricas parsed_records/invalid_records, sem payload completo em erros.
+- Job bounded isolado de QA e unbounded operacional; CLI/list/cancel documentados.
+
+Evidências do principal:
+- Build aprovado, SSL/ctypes/sqlite/bz2/lzma e PyFlink importam nos dois nós; versões3.11.14/1.20.3 confirmadas.
+- Suíte leve CPython3.11.14:346 passed,6 skipped em6,30s; Ruff aprovado.
+- Regressão get_metrics_group no runtime PyFlink:1 passed em0,37s. Aviso de cache Pytest ocorreu somente por bind de testes readonly no container temporário.
+- Integração Kafka→Flink bounded:1 passed em18,06s, FINISHED viaREST, diagnóstico JSON completo da fixture e log controlado de invalid_records.
+- Job operacional4de3a42bec3d9d68a659f5cce2064247 (weather-kafka-ingestion):RUNNING. Source/parser/diagnóstico/Sink RUNNING com paralelismo1.
+- Evento novo OP-1d7e85dee11d44be:1 ACK Kafka e PrintSink correspondente com timestamps11:20:23.201871Z/schema1.
+- Um TaskManager/um slot ocupado. JM/TM userflink, sem variáveis PostgreSQL.
+- Memória observada durante processamento:TM571MiB/limite1536MiB, JM286MiB/limite1GiB; sem necessidade de aumentar recursos.
+- Producer segue funcionando:novo ciclo confirmou collected3/accepted3/delivered3.
+- Review final aprovada, sem P1/P2 abertos; git diff --check aprovado.
+
+Problemas/correções:
+- Submissão python -m poderia criar execução local: substituída por flink run -d -py com JobID nativo e comprovação REST.
+- Primeiro teste real falhou ao abrir métricas: get_metric_group não existe no runtime Python. Corrigido para get_metrics_group, com regressão RED/GREEN e novo teste real.
+- Strings JSON com surrogate escapado: rejeitadas antes da serialização Row.
+- Prova/cleanup do teste fortalecidos:diagnóstico completo, ID preservado, cancelamento apenas do job de teste sob prazo limitado.
+
+Limites preservados:sem checkpoint/retomada/exactly-once ou política temporal/deduplicação/sinks de negócio. Submissão do job ainda manual; restart completo do cluster exige reenvio. Erros conhecidos de parsing são descartados/logados, regras adicionais ficam na Etapa5.
+
+Job operacional e Producer deixados ativos. Nenhum volume/topic/registro/grupo alheio foi removido. Próxima etapa:Etapa5 — Data Quality, ainda não iniciada.
