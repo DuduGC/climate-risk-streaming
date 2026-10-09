@@ -1,6 +1,6 @@
 # Etapa 5 — Data Quality
 
-Status: proposta para revisão em 2026-10-09. Etapas 1–4 concluídas; inspeção inicial sem alterações Git desconhecidas.
+Status: especificação aprovada em 2026-10-09; plano/implementação pendentes. Etapas 1–4 concluídas; inspeção inicial sem alterações Git desconhecidas.
 
 ## Objetivo
 
