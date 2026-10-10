@@ -9,7 +9,7 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 - Etapa 3: concluída; revisão e critérios aprovados em 2026-10-08.
 - Etapa 4: concluída; critérios/revisão aprovados em 2026-10-09.
 - Etapa 5: concluída; revisão independente e critérios reais aprovados em 2026-10-09 (logs finais em UTC 2026-10-10).
-- Etapa 6: em implementação; desenho e plano aprovados, execução sequencial com GPT-6 Luna Max.
+- Etapa 6: concluída em 2026-10-10; revisão final, seis cenários reais e operação/checkpoints aprovados.
 - Etapas 7–10: pendentes.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Git inicializado na branch `foundation`.
@@ -162,3 +162,8 @@ Job operacional e Producer deixados ativos. Nenhum volume/topic/registro/grupo a
 ## Aceite da Etapa 5
 
 Qualidade temporal e deduplicação com MapState/TTL86400 implementadas por GPT-6 Luna Max. Suíte361 passed/15 skipped, SDK8 passed, Ruff aprovado e três integrações reais aprovadas (74,65 s). Problemas de configuração QA e cache de leitura PyFlink corrigidos e protegidos por regressões. Prova operacional: uma saída para duas cópias, duplicate_records41→42. Job27e5e15139ad82f8beb22c40025c95bf permanece RUNNING. Revisão independente: sem P1/P2 abertos. Evidências e limites em docs/implementation/stage-5-acceptance.md. Etapa6 não iniciada.
+
+
+## Aceite da Etapa 6
+
+Event Time, watermarks, janelas30/5, agregados e checkpoints filesystem implementados e revisados. Final371passed/19skipped; SDK31passed; Ruff aprovado; seis cenários reais comPASS em execuções coordenadas (skip não contado). Operacional762137e915474bd6827555e68fc8e4c6 RUNNING; métricasCT01/RJ01/SP01; checkpoint60s e quatroCPs completos semfalha. Producer3/3 no último ciclo verificado. Evidências/limites/decisões em docs/implementation/stage-6-acceptance.md. Etapa7nãoiniciada.

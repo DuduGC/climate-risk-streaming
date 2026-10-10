@@ -85,12 +85,12 @@
 
 ## Verificação final — principal
 
-- [ ] Revisão de branch/diff completa por revisor independente; corrigir com implementador da tarefa, sem ampliar escopo.
-- [ ] Suíte geral Python3.11, SDK1.20.3, Ruff, build e integrações antigas+temporais+checkpoint aprovados; nenhuma integração skipped contabilizada como aceite.
-- [ ] Durante QA cancelar apenas operacional conhecido da etapa5; registrar a pausa do Producer e garantir restart em finally, inclusive se teste falhar. Testes unbounded devem recusar fontes concorrentes que invalidem a fixture histórica.
-- [ ] Submeter job operacional etapa6, TTL86400/checkpoint60/janelas30/5/desordem2, grupo operacional; aguardar checkpoint COMPLETED e métricas por localidade. Confirmar único jobRUNNING e ciclos reais Producer.
-- [ ] Verificar UID/permissões/ausência de credenciais PostgreSQL, recursos e backpressure emcarga pequena; nada de benchmark fictício ou aumento sem medição.
-- [ ] Scan secrets (sem imprimir senhas), .env ignorado, git diff/index check, docs/spec/plano/ledger consistentes e commit local; sem push. Reportar ETAPA6 CONCLUÍDA só após todos os critérios. Etapa7 fica pendente.
+- [x] Revisão de branch/diff completa por revisor independente; corrigir com implementador da tarefa, sem ampliar escopo.
+- [x] Suíte geral Python3.11, SDK1.20.3, Ruff, build e integrações antigas+temporais+checkpoint aprovados; nenhuma integração skipped contabilizada como aceite.
+- [x] Durante QA cancelar apenas operacional conhecido da etapa5; registrar a pausa do Producer e garantir restart em finally, inclusive se teste falhar. Testes unbounded devem recusar fontes concorrentes que invalidem a fixture histórica.
+- [x] Submeter job operacional etapa6, TTL86400/checkpoint60/janelas30/5/desordem2, grupo operacional; aguardar checkpoint COMPLETED e métricas por localidade. Confirmar único jobRUNNING e ciclos reais Producer.
+- [x] Verificar UID/permissões/ausência de credenciais PostgreSQL, recursos e backpressure emcarga pequena; nada de benchmark fictício ou aumento sem medição.
+- [x] Scan secrets (sem imprimir senhas), .env ignorado, git diff/index check, docs/spec/plano/ledger consistentes e commit local; sem push. Reportar ETAPA6 CONCLUÍDA só após todos os critérios. Etapa7 fica pendente.
 
 ## Revisão do plano e decisões de execução
 
@@ -101,3 +101,6 @@ Ruling QA: pausar Producer conhecido para histórico unbounded/recovery e usar b
 Método já escolhido pelo usuário: agentes implementadores GPT-6 Luna Max, revisão/QA principal e revisor independente. Duas tarefas dependentes executadas sequencialmente; não iniciar múltiplos agentes escrevendo nos mesmos arquivos. Plano aprovado pelo usuário em 2026-10-10; execução iniciada.
 
 Referências: [aggregate PyFlink1.20](https://nightlies.apache.org/flink/flink-docs-release-1.20/api/python/reference/pyflink.datastream/api/pyflink.datastream.data_stream.WindowedStream.aggregate.html), [checkpoint storage PyFlink1.20](https://nightlies.apache.org/flink/flink-docs-release-1.20/api/python/reference/pyflink.datastream/api/pyflink.datastream.checkpoint_config.CheckpointConfig.set_checkpoint_storage.html), fontes de windows/checkpoints do spec.
+
+
+Aceite final2026-10-10:371passed19skips/Ruff,SDK31passed,six realPASS em execuções coordenadas, recoveryCPanterior comprovado, operacionalRUNNING comcheckpoint60/métricasreais. Revisões semP1P2, recursos dentrodoslimites, .env ignorado e scans semcredenciais. FechamentoGitlocal; etapa7pendente.

@@ -41,3 +41,15 @@ Task2 fixretençãoGREEN: SDK31passed13,84s; clusterREST execution.checkpointing
 Task 2: complete — retençãoefetiva2/JM+TMConfig, volume9999, SDK31/light371/Ruff/revisão+recover77,26s aprovados. OrigCP3maisrecente; restoreCP2 confirmadoREST/newCP5. Commitlocalatualizado e verificaçãowholebranch/operacional a seguir; etapa6aindanãoencerrada.
 
 Regressões finais legadas Kafka/Flink:3passed86,18s comcheckpoints habilitados. Verificação temporalwhole3(em vez de limitarQAoTask1semCP) a seguir; sourceprod estável. Task2indexcheck detectoublankEOFbrief e foi corrigido semalterarlógica.
+
+## Retomada após continue do usuário
+
+Código/commits preservados (5e81753/2e30975), checkoutlimpo. Sessão doúltimoQAtemporalglobal27836 indisponível apósinterrupção/quota, portREST8081semconexão. NãoinferirPASSsemoutput; serviçosserãorestaurados eQAglobalreexecutadocomlogdurável. Ruling: revisorfinalGPT-6.1SolHigh emvezAstra — tentativaAstrafalhoulimiteuso — custo: revisãoemmodelodisponível, semalterarmodelodosimplementadoresLunaMax. Nenhumtestecódigo/revisãocompletadaredespachada; somentegatefinalpendente. Etapa7nãoiniciada.
+
+QA temporalfinal apósretomada:2passed1skipped162,52s(log.venv/stage6-final-temporal.log). Skipnãoaceito comoPASS; prováveltransiçãoCancelled asyncjobpróprio/slot, motivo nãoimpresso por -q anterior. Recuperaçãoseráexecutadaisoladamente comslotlivre e-rs/logdurável, semmudarprodução. Revisorfinalfallback6.1Sol aprovouwholebranch b6..2e30975, semP1P2. Integração/operacionalrestantesroot.
+
+QAfinalretomada:temporalbounded/unbounded2passed162,52s; recuperaçãoisolada1passed2deselected73,01s(logdurável.venv/stage6-final-recovery.log), semskipcounted. Todos6cenáriosreais possuemPASS:3legados86,18s +2temporais +1recuperação. RevisorfinalfallbackwholebranchaprovadosemP1P2. JobQAcleanupIDs4655395ac4dd2a7f28abbd859e3051e4/5ab7216be1ede558d71546fa85113e85 eorig/restoredcfa934431b03582d4b2078efa214a3f8/4e363cec305f74c52123fbc0265d8cd5 terminalCANCELED/FINISHED. Producerrestaurado. Operacionalsubmissãoemexecução; etapa6nãoanunciaratéCP/métricas/resource+docscommit.
+
+## Fechamento da Etapa 6
+
+Finalfresh:371passed19skips6,93s/Ruff; SDK31passed16,80s. SeiscenáriosreaisPASS em execuções coordenadas; recovery73,01s finalisolada, nenhumskiptratadocomoaceite. Operacional762137e915474bd6827555e68fc8e4c6 RUNNING, 174métricasCT/RJ/SP na prova,4CPsCOMPLETED/0failed, CP4estado232628bytes/14ms. TM781,6MiB/JM476,3MiB, backpressure0 nos3vertices, UID9999, semPGvars. Producer recuperoudeOpenMeteoErrorRJ e último ciclo3/3 failures0. Ruling: manterbranchfoundationlocalsem push/merge conformeplanoaprovado — integraçãoremota nãoautorizada — custo: integrarposteriormente quando solicitado. Todosgates atendidos; documentodeaceite/reviewfinal/progress atualizados, indexcheck/scan/commitfinal aseguir. Workspace scratchQA e volumespreservados, nãodeletarworkspacealheio. Etapa7nãoiniciada.
