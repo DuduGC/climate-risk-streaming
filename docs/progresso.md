@@ -9,7 +9,8 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 - Etapa 3: concluída; revisão e critérios aprovados em 2026-10-08.
 - Etapa 4: concluída; critérios/revisão aprovados em 2026-10-09.
 - Etapa 5: concluída; revisão independente e critérios reais aprovados em 2026-10-09 (logs finais em UTC 2026-10-10).
-- Etapas 6–10: pendentes.
+- Etapa 6: em implementação; desenho e plano aprovados, execução sequencial com GPT-6 Luna Max.
+- Etapas 7–10: pendentes.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Git inicializado na branch `foundation`.
 - Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
