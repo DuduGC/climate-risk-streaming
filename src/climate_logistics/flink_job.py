@@ -22,6 +22,7 @@ from climate_logistics.data_quality import (
     event_identity,
     validate_event_time,
 )
+from climate_logistics.flink_temporal import attach_temporal_metrics
 from climate_logistics.weather_parser import (
     WEATHER_FIELDS,
     WEATHER_KINDS,
@@ -239,6 +240,7 @@ def build_pipeline(settings: JobSettings) -> StreamExecutionEnvironment:
         execution_configuration.set_integer("python.fn-execution.bundle.time", 1000)
     env.configure(execution_configuration)
     env.set_parallelism(1)
+    env.get_config().set_auto_watermark_interval(200)
 
     starting_offsets = (
         KafkaOffsetsInitializer.latest()
@@ -283,6 +285,10 @@ def build_pipeline(settings: JobSettings) -> StreamExecutionEnvironment:
     ).name("weather-parse-diagnostic").uid("weather-parse-diagnostic")
     diagnostic_stream.print("weather-ingestion").name("weather-ingestion").uid(
         "weather-ingestion"
+    )
+    temporal_stream = attach_temporal_metrics(deduplicated_stream)
+    temporal_stream.print("weather-metrics").name("weather-metrics").uid(
+        "weather-metrics"
     )
     return env
 

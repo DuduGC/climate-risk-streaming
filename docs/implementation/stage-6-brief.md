@@ -41,7 +41,7 @@ Spec e plano aprovados em 2026-10-10. Principal reserva coordenação de serviç
 
 ## Tarefa 1 — Agregados e janelas de Event Time
 
-**Files:** criar src/climate_logistics/temporal_metrics.py e flink_temporal.py; modificar flink_job.py em build_pipeline; criar tests/unit/test_temporal_metrics.py, tests/unit/test_flink_temporal.py e tests/integration/test_flink_temporal.py; atualizar README.
+**Files:** criar src/climate_logistics/temporal_metrics.py e flink_temporal.py; modificar flink_job.py em build_pipeline; criar tests/unit/test_temporal_metrics.py, tests/unit/test_flink_temporal_sdk.py e tests/integration/test_flink_temporal.py; atualizar README.
 
 **Interfaces:**
 - Consome Sequence[object] na ordem WEATHER_FIELDS, já validada, via Row existente.
@@ -69,7 +69,7 @@ Spec e plano aprovados em 2026-10-10. Principal reserva coordenação de serviç
 
 ## Tarefa 2 — Storage, checkpoints e recuperação
 
-**Files:** modificar compose.yaml, docker/flink/Dockerfile, flink_job.py; acrescentar configure_checkpointing em flink_temporal.py; ampliar tests/unit/test_flink_temporal.py e tests/integration/test_flink_temporal.py; atualizar README.
+**Files:** modificar compose.yaml, docker/flink/Dockerfile, flink_job.py; acrescentar configure_checkpointing em flink_temporal.py; ampliar tests/unit/test_flink_temporal_sdk.py e tests/integration/test_flink_temporal.py; atualizar README.
 
 **Interfaces:**
 - configure_checkpointing(env: StreamExecutionEnvironment, *, interval_seconds: int = 60) -> None.
@@ -77,7 +77,7 @@ Spec e plano aprovados em 2026-10-10. Principal reserva coordenação de serviç
 - Não adicionar argumento Python para restore: usar CLI Flink run -s <metadata> -py ... com os mesmos args/UIDs; não usar allowNonRestoredState.
 
 - [ ] Escrever SDK RED para valores efetivos de checkpoints/restart/storage/retention e QA identity. Operacional60000ms, timeout120000, pausa10000, concurrency1, EXACTLY_ONCE, tolerable_failures0, RETAIN_ON_CANCELLATION; rejeitar custom em operacional/mismatch/valores fora5..60.
-- [ ] Implementar configurações usando Configuration+env.configure para execution.checkpointing.storage=filesystem, execution.checkpointing.dir=file:///opt/flink/checkpoints, state.checkpoints.num-retained=2; API checkpoint para interval/mode/timeout/pause/concurrency/failures/external retention. RestartStrategies.fixed_delay_restart(3,Time.seconds(10)). Preservar state.cache-size0 e defaults do bundle operacional.
+- [ ] Implementar configurações usando Configuration+env.configure para execution.checkpointing.storage=filesystem, execution.checkpointing.dir=file:///opt/flink/checkpoints, state.checkpoints.num-retained=2; API checkpoint para interval/mode/timeout/pause/concurrency/failures/external retention. RestartStrategies.fixed_delay_restart(3,10000). Preservar state.cache-size0 e defaults do bundle operacional.
 - [ ] Adicionar diretório /opt/flink/checkpoints na imagem com owner flink e volume flink-checkpoints em ambos os nós, sem serviço novo. Executar compose config --quiet sem imprimir configuração expandida e rebuild; confirmar writer/readers uid9999 conseguem criar/ler pequeno marcador no novo volume. Remover apenas esse marcador técnico próprio após teste, nunca diretório/volume inteiro.
 - [ ] Executar SDK no runtime e suíte anterior para detectar opções ignoradas/signaturas erradas. Confirmar metadata/checkpoint storage efetivo, não só objeto mock.
 - [ ] Escrever recuperação RED: QA/latest, checkpoint_interval10s e dedup TTL operacional86400; Producer pausado. Publicar A de2020 numa janela aberta, esperar aceiteaudit e checkpoint COMPLETED disparado depois do aceite; guardar external_path/_metadata, id, timestamps e offsets do source. Verificar arquivo do path capturado existe nos dois nós.

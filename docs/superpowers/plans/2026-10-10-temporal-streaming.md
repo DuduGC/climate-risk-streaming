@@ -1,6 +1,6 @@
 # Etapa 6 — Streaming temporal Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Gerar métricas temporais por localidade e comprovar recuperação de estado e offsets no Kafka/PyFlink local.
 
@@ -30,14 +30,14 @@
 
 ## Preparação — principal
 
-- [ ] Confirmar base baa6474 e alterações apenas documentais; criar stage-6-brief.md e stage-6-progress.md com spec/plano/autorizações.
-- [ ] Usar checkout dedicado existente como nas etapas anteriores; registrar ruling de isolamento. Ler skill using-git-worktrees na execução e não criar checkout redundante sem necessidade.
-- [ ] Conferir APIs no SDK instalado antes de implementação: TimestampAssigner, aggregate(..., accumulator_type=..., output_type=...), ProcessWindowFunction, OutputTag, checkpoint/restart. API Java real é referência para regressões.
-- [ ] Registrar jobs REST e estado do Producer; coordenar pausa apenas do operacional conhecido e do Producer conhecido durante QA. Revisor não repetirá Docker se depender de aprovação pendente; usar evidências do principal.
+- [x] Confirmar base baa6474 e alterações apenas documentais; criar stage-6-brief.md e stage-6-progress.md com spec/plano/autorizações.
+- [x] Usar checkout dedicado existente como nas etapas anteriores; registrar ruling de isolamento. Ler skill using-git-worktrees na execução e não criar checkout redundante sem necessidade.
+- [x] Conferir APIs no SDK instalado antes de implementação: TimestampAssigner, aggregate(..., accumulator_type=..., output_type=...), ProcessWindowFunction, OutputTag, checkpoint/restart. API Java real é referência para regressões.
+- [x] Registrar jobs REST e estado do Producer; coordenar pausa apenas do operacional conhecido e do Producer conhecido durante QA. Revisor não repetirá Docker se depender de aprovação pendente; usar evidências do principal.
 
 ## Tarefa 1 — Agregados e janelas de Event Time
 
-**Files:** criar src/climate_logistics/temporal_metrics.py e flink_temporal.py; modificar flink_job.py em build_pipeline; criar tests/unit/test_temporal_metrics.py, tests/unit/test_flink_temporal.py e tests/integration/test_flink_temporal.py; atualizar README.
+**Files:** criar src/climate_logistics/temporal_metrics.py e flink_temporal.py; modificar flink_job.py em build_pipeline; criar tests/unit/test_temporal_metrics.py, tests/unit/test_flink_temporal_sdk.py e tests/integration/test_flink_temporal.py; atualizar README.
 
 **Interfaces:**
 - Consome Sequence[object] na ordem WEATHER_FIELDS, já validada, via Row existente.
@@ -49,23 +49,23 @@
 - attach_temporal_metrics(stream: DataStream) -> DataStream: liga atribuição/keyBy/window/side output e retorna JSON STRING de métricas; build_pipeline chama print('weather-metrics') no retorno.
 - UIDs novos estáveis: weather-event-time, weather-temporal-windows, weather-late-counter, weather-late-discard, weather-metrics. Não renomear UIDs antigos.
 
-- [ ] Escrever testes puros RED: duas observações temp20/30 dão média25/count2; chuva2mm/900s e1mm/300s dão max2/rate12mmh; máximos vento/rajada, mínima visibilidade, intervalos300/900, primeiro/último timestamp. Comparar floats com pytest.approx; não alterar entradas.
-- [ ] Testar merge de acumuladores e identidade com vazio; estrutura tem11 escalares independentemente da contagem; empty finalization lança ValueError. Testar timestamp offset equivalente, .123999→123ms, epoch0 e datetime máximo→253402300799999ms.
-- [ ] Executar pytest tests/unit/test_temporal_metrics.py -q, observar RED por contrato ausente; implementar módulo puro mínimo e repetir até GREEN.
-- [ ] Escrever SDK RED: TimestampAssigner usa campo event_timestamp; SlidingEventTimeWindows real atribui seis janelas a timestamp0: starts[-1500000,-1200000,-900000,-600000,-300000,0], ends=starts+1800000; timestamp300000 pertence ao novo conjunto, não à janela cujo fim300000. Conferir dimensões1800000/300000, watermark120000, interval200 e idleness60000.
-- [ ] Implementar adaptadores usando APIs SDK, aggregate com accumulator_type=Types.PICKLED_BYTE_ARRAY() e output_type=Types.STRING(); get_result retorna acumulador, ProcessWindowFunction só recebe o acumulador e fronteiras. Resultado JSON determinístico (allow_nan=False); sem lista de eventos/window apply que bufferize todos.
-- [ ] Ligar WatermarkStrategy.for_bounded_out_of_orderness(Duration.of_seconds(120)).with_timestamp_assigner(...).with_idleness(Duration.of_seconds(60)) depois de dedup; keyBy localização; SlidingEventTimeWindows.of(Time.minutes(30),Time.minutes(5)); allowed_lateness0.
-- [ ] Definir OutputTag('weather-temporal-late', tipo Row existente), side_output_late_data e consumir ramo com counter temporal_stream.late_records e DiscardingSink, sem outro tópico. SDK testa contador e saída mínima/controlada; não interpretar parse accepted como contribuição a toda janela.
-- [ ] Escrever integração bounded RED, preservando tests/integration/test_kafka_flink.py. Reutilizar helpers por import e pytest config existentes; novos helpers de CLI recebem args extras/restore, sem refactor grande. Jobs/grupos exclusivos, captura de JobID antes de espera e cleanup em finally só próprios.
-- [ ] Fixture bounded usa base=floor(now_utc_ms/300000)*300000 (não ano2020 para esse caso, porque earliest lê backlog atual). Publicar A embase+90000ms, B embase+30000ms, cópiaA com ingestão revisada e C emoutra localidade. Timestamps/ingestões respeitam5min; primeiras janelas terminam embase+300000, portanto backlog anterior não deve fechá-las. Calcular oracle de seis participações por evento e comparar JSON completos por identidade; média tolerante. FINISHED/terminal watermark fecha todas; duplicata não infla count.
-- [ ] Integração unbounded QA/latest usa fixture histórica, Producer pausado pelo principal. Confirmar source RUNNING e offsets das partições antes de publicar. Publicar A em12:10, B em12:09 (fora de ordem dentro120s); avanço em12:43 (watermark próximo de12:41) fecha todas as janelasA/B, cujo último fim é12:40. Aguardar métrica/watermark real antes de publicar C em12:15: parcialmente atrasado, ainda contribui a janelas abertas. Avançar para13:20, aguardar fechamento, então publicar D em12:09:30: totalmente atrasado. Exigir incremento late_records1, nenhuma nova/revisada saída das janelas fechadas, e resultados exatos das janelas ainda abertas deC. Sentinel emoutra localidade; preservar ing histórica coerente.
-- [ ] Testar fluxo ocioso sem gerar métricas por passagem de wall clock: eventos de12:10 não fecham a última janela apenas por idle. Usar REST watermark e saídas como evidência; esperas com deadlines, não sleep de30min. Partições sem fixture não impedem o fechamento após sentinel.
-- [ ] Executar suíte pura Python3.11.14, SDK na imagem final, Ruff e integração temporal. Principal rebuild/recria apenas quando source mudou; coordenar um slot. Registrar RED/GREEN, contagens e limitações no relatório tarefa1.
-- [ ] README documenta campo/units, participação emseis janelas, atraso parcial/global, desordem≠allowed lateness, latência Open-Meteo e ociosidade. Principal/revisor aprovam tarefa antes de prosseguir; commit local somente arquivos desta tarefa+docs acordados.
+- [x] Escrever testes puros RED: duas observações temp20/30 dão média25/count2; chuva2mm/900s e1mm/300s dão max2/rate12mmh; máximos vento/rajada, mínima visibilidade, intervalos300/900, primeiro/último timestamp. Comparar floats com pytest.approx; não alterar entradas.
+- [x] Testar merge de acumuladores e identidade com vazio; estrutura tem11 escalares independentemente da contagem; empty finalization lança ValueError. Testar timestamp offset equivalente, .123999→123ms, epoch0 e datetime máximo→253402300799999ms.
+- [x] Executar pytest tests/unit/test_temporal_metrics.py -q, observar RED por contrato ausente; implementar módulo puro mínimo e repetir até GREEN.
+- [x] Escrever SDK RED: TimestampAssigner usa campo event_timestamp; SlidingEventTimeWindows real atribui seis janelas a timestamp0: starts[-1500000,-1200000,-900000,-600000,-300000,0], ends=starts+1800000; timestamp300000 pertence ao novo conjunto, não à janela cujo fim300000. Conferir dimensões1800000/300000, watermark120000, interval200 e idleness60000.
+- [x] Implementar adaptadores usando APIs SDK, aggregate com accumulator_type=Types.PICKLED_BYTE_ARRAY() e output_type=Types.STRING(); get_result retorna acumulador, ProcessWindowFunction só recebe o acumulador e fronteiras. Resultado JSON determinístico (allow_nan=False); sem lista de eventos/window apply que bufferize todos.
+- [x] Ligar WatermarkStrategy.for_bounded_out_of_orderness(Duration.of_seconds(120)).with_timestamp_assigner(...).with_idleness(Duration.of_seconds(60)) depois de dedup; keyBy localização; SlidingEventTimeWindows.of(Time.minutes(30),Time.minutes(5)); allowed_lateness0.
+- [x] Definir OutputTag('weather-temporal-late', tipo Row existente), side_output_late_data e consumir ramo com counter temporal_stream.late_records e SinkFunction Java DiscardingSink verificado no SDK, sem outro tópico. SDK testa contador e saída mínima/controlada; não interpretar parse accepted como contribuição a toda janela.
+- [x] Escrever integração bounded RED, preservando tests/integration/test_kafka_flink.py. Reutilizar helpers por import e pytest config existentes; novos helpers de CLI recebem args extras/restore, sem refactor grande. Jobs/grupos exclusivos, captura de JobID antes de espera e cleanup em finally só próprios.
+- [x] Fixture bounded usa base=floor(now_utc_ms/300000)*300000 (não ano2020 para esse caso, porque earliest lê backlog atual). Publicar A embase+90000ms, B embase+30000ms, cópiaA com ingestão revisada e C emoutra localidade. Timestamps/ingestões respeitam5min; primeiras janelas terminam embase+300000, portanto backlog anterior não deve fechá-las. Calcular oracle de seis participações por evento e comparar JSON completos por identidade; média tolerante. FINISHED/terminal watermark fecha todas; duplicata não infla count.
+- [x] Integração unbounded QA/latest usa fixture histórica, Producer pausado pelo principal. Confirmar source RUNNING e offsets das partições antes de publicar. Publicar A em12:10, B em12:09 (fora de ordem dentro120s); avanço em12:43 (watermark próximo de12:41) fecha todas as janelasA/B, cujo último fim é12:40. Aguardar métrica/watermark real antes de publicar C em12:15: parcialmente atrasado, ainda contribui a janelas abertas. Avançar para13:20, aguardar fechamento, então publicar D em12:09:30: totalmente atrasado. Exigir incremento late_records1, nenhuma nova/revisada saída das janelas fechadas, e resultados exatos das janelas ainda abertas deC. Sentinel emoutra localidade; preservar ing histórica coerente.
+- [x] Testar fluxo ocioso sem gerar métricas por passagem de wall clock: eventos de12:10 não fecham a última janela apenas por idle. Usar REST watermark e saídas como evidência; esperas com deadlines, não sleep de30min. Partições sem fixture não impedem o fechamento após sentinel.
+- [x] Executar suíte pura Python3.11.14, SDK na imagem final, Ruff e integração temporal. Principal rebuild/recria apenas quando source mudou; coordenar um slot. Registrar RED/GREEN, contagens e limitações no relatório tarefa1.
+- [x] README documenta campo/units, participação emseis janelas, atraso parcial/global, desordem≠allowed lateness, latência Open-Meteo e ociosidade. Principal/revisor aprovam tarefa antes de prosseguir; commit local somente arquivos desta tarefa+docs acordados.
 
 ## Tarefa 2 — Storage, checkpoints e recuperação
 
-**Files:** modificar compose.yaml, docker/flink/Dockerfile, flink_job.py; acrescentar configure_checkpointing em flink_temporal.py; ampliar tests/unit/test_flink_temporal.py e tests/integration/test_flink_temporal.py; atualizar README.
+**Files:** modificar compose.yaml, docker/flink/Dockerfile, flink_job.py; acrescentar configure_checkpointing em flink_temporal.py; ampliar tests/unit/test_flink_temporal_sdk.py e tests/integration/test_flink_temporal.py; atualizar README.
 
 **Interfaces:**
 - configure_checkpointing(env: StreamExecutionEnvironment, *, interval_seconds: int = 60) -> None.
@@ -73,7 +73,7 @@
 - Não adicionar argumento Python para restore: usar CLI Flink run -s <metadata> -py ... com os mesmos args/UIDs; não usar allowNonRestoredState.
 
 - [ ] Escrever SDK RED para valores efetivos de checkpoints/restart/storage/retention e QA identity. Operacional60000ms, timeout120000, pausa10000, concurrency1, EXACTLY_ONCE, tolerable_failures0, RETAIN_ON_CANCELLATION; rejeitar custom em operacional/mismatch/valores fora5..60.
-- [ ] Implementar configurações usando Configuration+env.configure para execution.checkpointing.storage=filesystem, execution.checkpointing.dir=file:///opt/flink/checkpoints, state.checkpoints.num-retained=2; API checkpoint para interval/mode/timeout/pause/concurrency/failures/external retention. RestartStrategies.fixed_delay_restart(3,Time.seconds(10)). Preservar state.cache-size0 e defaults do bundle operacional.
+- [ ] Implementar configurações usando Configuration+env.configure para execution.checkpointing.storage=filesystem, execution.checkpointing.dir=file:///opt/flink/checkpoints, state.checkpoints.num-retained=2; API checkpoint para interval/mode/timeout/pause/concurrency/failures/external retention. RestartStrategies.fixed_delay_restart(3,10000). Preservar state.cache-size0 e defaults do bundle operacional.
 - [ ] Adicionar diretório /opt/flink/checkpoints na imagem com owner flink e volume flink-checkpoints em ambos os nós, sem serviço novo. Executar compose config --quiet sem imprimir configuração expandida e rebuild; confirmar writer/readers uid9999 conseguem criar/ler pequeno marcador no novo volume. Remover apenas esse marcador técnico próprio após teste, nunca diretório/volume inteiro.
 - [ ] Executar SDK no runtime e suíte anterior para detectar opções ignoradas/signaturas erradas. Confirmar metadata/checkpoint storage efetivo, não só objeto mock.
 - [ ] Escrever recuperação RED: QA/latest, checkpoint_interval10s e dedup TTL operacional86400; Producer pausado. Publicar A de2020 numa janela aberta, esperar aceiteaudit e checkpoint COMPLETED disparado depois do aceite; guardar external_path/_metadata, id, timestamps e offsets do source. Verificar arquivo do path capturado existe nos dois nós.

@@ -148,7 +148,17 @@ Não há limite de idade baseado no horário em que o job começou: um replay an
 
 O operador usa `MapState` gerenciado por chave de localidade, com timestamp UTC como chave e marcador booleano como valor. O TTL operacional é de 86.400 segundos em processing time, com atualização somente na criação/escrita, leitura de entradas expiradas como ausentes e limpeza incremental do backend heap. O job desabilita o cache de estado Python (`python.state.cache-size=0`) para que uma leitura não devolva um marcador expirado. A consulta de uma duplicata não escreve nem renova o TTL. Esse prazo define a janela lógica de deduplicação: volume de identidades únicas afeta o tamanho do estado, e a remoção física é incremental e best effort, sem teto rígido de memória. Sem checkpoint, o restart perde os marcadores; após o TTL, uma identidade pode voltar a ser aceita. O fluxo ainda não promete deduplicação permanente ou exactly-once.
 
-As métricas ficam nos grupos `weather_ingestion` e `data_quality`: `parsed_records` conta schema válido antes da política temporal; `invalid_records` inclui erros de parsing e de temporalidade; `temporal_rejected_records` conta as rejeições temporais; `duplicate_records` conta identidades ainda vigentes; e `accepted_records` conta os registros que avançam após a deduplicação. O diagnóstico de sucesso continua compatível com a Etapa 4 e só é emitido após aceitação. O fluxo não usa Event Time, watermarks, janelas ou checkpoints; esses itens continuam para uma etapa posterior.
+As métricas ficam nos grupos `weather_ingestion` e `data_quality`: `parsed_records` conta schema válido antes da política temporal; `invalid_records` inclui erros de parsing e de temporalidade; `temporal_rejected_records` conta as rejeições temporais; `duplicate_records` conta identidades ainda vigentes; e `accepted_records` conta os registros que avançam após a deduplicação. O diagnóstico de ingestão continua no ramo atual, em paralelo às novas métricas temporais.
+
+## Métricas temporais por localidade
+
+Depois da validação e da deduplicação, o job usa `event_timestamp` UTC como Event Time. Atribui watermarks com até 120 segundos de desordem, emissão a cada 200 ms e idleness de 60 segundos. O relógio de parede não fecha janelas quando o fluxo inteiro fica parado; elas aguardam novos eventos ou, em fontes bounded, o watermark terminal. O atraso das métricas também depende da frequência de novas observações do Open-Meteo. Como o watermark é global ao fluxo, uma localidade com timestamps atrasados pode perder participação em janelas que já fecharam.
+
+As janelas são deslizantes de 30 minutos, avançam em intervalos de 5 minutos e usam intervalos `[início, fim)` alinhados ao epoch UTC. Cada evento válido participa de seis janelas por `location_id`. As métricas aparecem no PrintSink `weather-metrics` como JSON com início/fim em milissegundos UTC, contagem, média aritmética de temperatura, extremos de vento e visibilidade, intervalos das observações e extremos dos timestamps. A média considera cada observação uma vez, sem ponderação pelo tempo.
+
+`precipitation_max` é a maior precipitação observada na janela, não uma soma. `precipitation_rate_max_mm_per_hour` é a maior projeção `precipitação × 3600 / intervalo_da_observação`, não uma medição acumulada de uma hora. O agregador guarda apenas contagem, soma e extremos escalares; não mantém uma lista de eventos. As métricas são diagnósticas em log e ainda não são persistidas em tópico ou banco.
+
+O `allowed_lateness` é zero. Os 120 segundos de desordem controlam o avanço do watermark e não reabrem janelas fechadas. Um evento parcialmente atrasado ainda contribui para as janelas abertas; `temporal_stream.late_records` conta uma vez somente quando todas as janelas do evento já fecharam. O payload atrasado é descartado após a contagem, sem tópico novo. Nesta tarefa, o job ainda não configura checkpoints; reiniciar pode perder o estado das janelas e da deduplicação.
 
 Construa a imagem compartilhada e inicie os serviços:
 
@@ -185,7 +195,7 @@ docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink cancel JOB
 
 O source começa em `earliest`, usa o grupo `weather-flink-ingestion`, não faz auto-commit e roda com paralelismo 1. Sem checkpoint nesta etapa, uma nova submissão pode reler os registros retidos no tópico; não há promessa de recuperação ou exactly-once. O diagnóstico é temporário e não grava no PostgreSQL nem em outro tópico.
 
-A integração bounded existente confirma o descarte de JSON inválido e a saída do evento válido. Um segundo cenário bounded publica JSON inválido, timestamps incoerentes, uma identidade válida, uma cópia revisada com ingestão e offset diferentes, a mesma hora em outra localidade e um instante novo na primeira localidade. Ele aguarda `FINISHED` e compara os JSON do PrintSink e a auditoria QA por identidade.
+A integração bounded existente confirma o descarte de JSON inválido e a saída do evento válido. Um segundo cenário bounded publica JSON inválido, timestamps incoerentes, uma identidade válida, uma cópia revisada com ingestão e offset diferentes, a mesma hora em outra localidade e um instante novo na primeira localidade. Ele aguarda `FINISHED` e compara os JSON do PrintSink e a auditoria QA por identidade. Os testes temporais bounded comparam as seis participações de cada fixture a um oracle completo, incluindo desordem, deduplicação e a fronteira exclusiva da janela.
 
 O cenário TTL sobe um job QA não bounded com TTL de 20 segundos, publica um evento histórico válido, descarta uma cópia perto do fim do prazo e aceita outra após o deadline original. A segunda aceitação ocorre antes do deadline que existiria se a consulta duplicada renovasse o estado; assim, a prova cobre processing time, replay e ausência de refresh. A execução usa bundle de tamanho 1 e tempo de 1000 ms somente no job QA. Os flags `--qa-audit` e `--qa-dedup-ttl-seconds` exigem nome `weather-flink-qa-<id>` e grupo com o mesmo prefixo exclusivo, por exemplo `weather-flink-qa-a1b2` e `weather-flink-qa-a1b2-group`. O override de TTL aceita apenas 2 a 60 segundos; o job operacional mantém 86.400 segundos sem override por ambiente.
 
@@ -193,11 +203,11 @@ Esses testes cancelam somente o próprio JobID. Antes de iniciar a integração,
 
 ~~~powershell
 $env:FLINK_INTEGRATION = "1"
-python -m pytest tests/integration/test_kafka_flink.py -q
+python -m pytest tests/integration/test_kafka_flink.py tests/integration/test_flink_temporal.py -q
 Remove-Item Env:FLINK_INTEGRATION
 ~~~
 
-No Linux, use `FLINK_INTEGRATION=1 python -m pytest tests/integration/test_kafka_flink.py -q`.
+No Linux, use `FLINK_INTEGRATION=1 python -m pytest tests/integration/test_kafka_flink.py tests/integration/test_flink_temporal.py -q`. O cenário temporal unbounded exige que o Producer conhecido esteja pausado e que não haja outro job usando o único slot; os testes não cancelam nem alteram jobs alheios.
 
 ## Python e qualidade
 
@@ -233,4 +243,4 @@ docker compose stop
 
 O script de bootstrap do PostgreSQL executa somente quando `postgres-data` está vazio. Alterar uma senha no `.env` não muda a senha de uma role que já existe; atualize-a no banco com uma sessão administrativa. O mesmo vale para as credenciais iniciais do banco.
 
-A Etapa 3 criou os tópicos weather.raw e weather.alerts com três partições; a criação automática do broker segue desabilitada. A Etapa 4 executa o primeiro job Flink com diagnóstico no TaskManager; ainda não há persistência de negócio, JDBC ou checkpoint. Etapas posteriores tratarão os sinks no schema climate e o consumo de alertas.
+A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão, e a Etapa 6 acrescenta as métricas temporais no TaskManager. Nesta tarefa ainda não há persistência de negócio, JDBC ou checkpoints; os sinks no schema `climate` e o consumo de alertas ficam para etapas posteriores.
