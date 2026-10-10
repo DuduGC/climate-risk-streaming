@@ -8,7 +8,8 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 - Etapa 2: concluída; critérios e revisão aprovados em 2026-10-07.
 - Etapa 3: concluída; revisão e critérios aprovados em 2026-10-08.
 - Etapa 4: concluída; critérios/revisão aprovados em 2026-10-09.
-- Etapas 5–10: pendentes.
+- Etapa 5: concluída; revisão independente e critérios reais aprovados em 2026-10-09 (logs finais em UTC 2026-10-10).
+- Etapas 6–10: pendentes.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Git inicializado na branch `foundation`.
 - Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
@@ -155,3 +156,8 @@ Problemas/correções:
 Limites preservados:sem checkpoint/retomada/exactly-once ou política temporal/deduplicação/sinks de negócio. Submissão do job ainda manual; restart completo do cluster exige reenvio. Erros conhecidos de parsing são descartados/logados, regras adicionais ficam na Etapa5.
 
 Job operacional e Producer deixados ativos. Nenhum volume/topic/registro/grupo alheio foi removido. Próxima etapa:Etapa5 — Data Quality, ainda não iniciada.
+
+
+## Aceite da Etapa 5
+
+Qualidade temporal e deduplicação com MapState/TTL86400 implementadas por GPT-6 Luna Max. Suíte361 passed/15 skipped, SDK8 passed, Ruff aprovado e três integrações reais aprovadas (74,65 s). Problemas de configuração QA e cache de leitura PyFlink corrigidos e protegidos por regressões. Prova operacional: uma saída para duas cópias, duplicate_records41→42. Job27e5e15139ad82f8beb22c40025c95bf permanece RUNNING. Revisão independente: sem P1/P2 abertos. Evidências e limites em docs/implementation/stage-5-acceptance.md. Etapa6 não iniciada.

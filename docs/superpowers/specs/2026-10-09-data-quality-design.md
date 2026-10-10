@@ -76,3 +76,9 @@ Recomendação: MapState gerenciado por keyBy de localidade, com TTL e política
 ## Fonte primária
 
 https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/fault-tolerance/state/ — keyed state, TTL por entrada, processing time e cleanup incremental.
+
+## Decisões confirmadas no runtime
+
+O teste real mostrou que o cache do worker podia manter marcador após o TTL no conjunto PyFlink1.20.3/Beam2.48 instalado. Configurar a opção pública python.state.cache-size=0 em todas as execuções; não modificar bibliotecas nem substituir TTL gerenciado por relógio Python. Regressão lê a configuração Java e integração confirma expiração. QA usa TTL20s para margem de orquestração Docker, mantendo prova de ausência de renovação; a política operacional continua86400s.
+
+QA unbounded usa latest para não processar backlog no experimento; modo operacional e QA bounded usam earliest. Nenhum grupo/dado é apagado.

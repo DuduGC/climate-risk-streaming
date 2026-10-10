@@ -1,6 +1,6 @@
 # Climate Logistics Streaming Platform
 
-Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink fará o processamento e PostgreSQL armazenará resultados de negócio. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em weather.raw. A Etapa 4 adiciona o primeiro job Flink, que consome esse tópico e emite um diagnóstico técnico; tabelas de negócio e consumidor de alertas continuam para etapas posteriores.
+Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink fará o processamento e PostgreSQL armazenará resultados de negócio. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em weather.raw. A Etapa 4 adicionou o primeiro job Flink, e a Etapa 5 valida coerência temporal e deduplica eventos nesse fluxo; tabelas de negócio e consumidor de alertas continuam para etapas posteriores.
 
 ## Requisitos e recursos
 
@@ -136,11 +136,19 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-s
 
 A chave Kafka é location_id em UTF-8. O valor é o JSON compacto do WeatherEvent, sem campos adicionais, limitado a 16 KiB. event_timestamp conserva o horário do dado meteorológico; ingestion_timestamp registra a recepção HTTP e também define o CreateTime Kafka em milissegundos. O log JSON registra entregas confirmadas por callback, falhas e um resumo por ciclo sem incluir o corpo HTTP.
 
-A idempotência do cliente reduz duplicações de retry na mesma sessão. Polls sucessivos e reinícios podem publicar novamente o mesmo dado lógico; não há deduplicação de negócio nesta etapa. Uma falha HTTP em uma localidade deixa as outras tentarem publicar, e o ciclo fica parcial. O Producer usa os timeouts de conexão/leitura HTTP já definidos pelo cliente; eles não garantem um prazo total absoluto. SIGTERM e SIGINT interrompem ciclos novos e iniciam flush limitado a 12 segundos.
+A idempotência do cliente reduz duplicações de retry na mesma sessão. Polls sucessivos e reinícios ainda podem publicar novamente o mesmo dado lógico; o job Flink mantém a primeira ocorrência válida por localidade e instante do evento durante o TTL descrito abaixo. Uma falha HTTP em uma localidade deixa as outras tentarem publicar, e o ciclo fica parcial. O Producer usa os timeouts de conexão/leitura HTTP já definidos pelo cliente; eles não garantem um prazo total absoluto. SIGTERM e SIGINT interrompem ciclos novos e iniciam flush limitado a 12 segundos.
 
-## Job PyFlink: Kafka para diagnóstico
+## Job PyFlink: qualidade e diagnóstico
 
-JobManager e TaskManager usam a imagem `climate-logistics-flink:local`, com o mesmo CPython 3.11.14, PyFlink 1.20.3 e o conector Kafka verificado. O job lê `weather.raw` em `kafka:9092`, valida o schema v1 e envia um JSON compacto ao PrintSink do TaskManager. Mensagens inválidas conhecidas são descartadas, contadas e registradas sem o corpo; falhas inesperadas interrompem o job.
+JobManager e TaskManager usam a imagem `climate-logistics-flink:local`, com o mesmo CPython 3.11.14, PyFlink 1.20.3 e o conector Kafka verificado. O job lê `weather.raw` em `kafka:9092`, valida o schema v1 e a coerência temporal, deduplica por localidade e envia um JSON compacto ao PrintSink do TaskManager. Mensagens inválidas conhecidas são descartadas e contadas sem registrar o corpo; falhas inesperadas interrompem o job.
+
+A política temporal compara os timestamps em UTC e aceita os limites inclusivos: ambos devem ser posteriores ou iguais a `1970-01-01T00:00:00Z`; `event_timestamp` pode ficar até cinco minutos à frente de `ingestion_timestamp`; ingestão pode ficar até cinco minutos à frente do relógio observado; e a diferença entre ingestão e evento não pode passar de 24 horas. As razões estáveis de rejeição são `timestamp_before_epoch`, `event_after_ingestion`, `ingestion_in_future` e `excessive_ingestion_delay`, nessa ordem de precedência. Um relógio sem fuso ou que não possa ser convertido para UTC é erro de configuração e falha visivelmente.
+
+Não há limite de idade baseado no horário em que o job começou: um replay antigo continua elegível se os timestamps originais respeitam a janela de 24 horas entre evento e ingestão. A identidade deduplicada é `location_id` mais `event_timestamp` normalizado em UTC; offsets diferentes para o mesmo instante e valores diferentes de ingestão continuam sendo a mesma identidade. A primeira ocorrência temporalmente válida vence, mesmo que uma publicação posterior traga payload revisado. Um evento rejeitado não cria marcador.
+
+O operador usa `MapState` gerenciado por chave de localidade, com timestamp UTC como chave e marcador booleano como valor. O TTL operacional é de 86.400 segundos em processing time, com atualização somente na criação/escrita, leitura de entradas expiradas como ausentes e limpeza incremental do backend heap. O job desabilita o cache de estado Python (`python.state.cache-size=0`) para que uma leitura não devolva um marcador expirado. A consulta de uma duplicata não escreve nem renova o TTL. Esse prazo define a janela lógica de deduplicação: volume de identidades únicas afeta o tamanho do estado, e a remoção física é incremental e best effort, sem teto rígido de memória. Sem checkpoint, o restart perde os marcadores; após o TTL, uma identidade pode voltar a ser aceita. O fluxo ainda não promete deduplicação permanente ou exactly-once.
+
+As métricas ficam nos grupos `weather_ingestion` e `data_quality`: `parsed_records` conta schema válido antes da política temporal; `invalid_records` inclui erros de parsing e de temporalidade; `temporal_rejected_records` conta as rejeições temporais; `duplicate_records` conta identidades ainda vigentes; e `accepted_records` conta os registros que avançam após a deduplicação. O diagnóstico de sucesso continua compatível com a Etapa 4 e só é emitido após aceitação. O fluxo não usa Event Time, watermarks, janelas ou checkpoints; esses itens continuam para uma etapa posterior.
 
 Construa a imagem compartilhada e inicie os serviços:
 
@@ -177,7 +185,11 @@ docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink cancel JOB
 
 O source começa em `earliest`, usa o grupo `weather-flink-ingestion`, não faz auto-commit e roda com paralelismo 1. Sem checkpoint nesta etapa, uma nova submissão pode reler os registros retidos no tópico; não há promessa de recuperação ou exactly-once. O diagnóstico é temporário e não grava no PostgreSQL nem em outro tópico.
 
-A integração bounded publica uma mensagem inválida seguida da fixture válida, submete com nome e grupo exclusivos, aguarda FINISHED e confirma o JSON do PrintSink e o log `invalid_records`. Ela não cancela jobs desconhecidos; antes de executá-la, confira a lista e coordene a pausa/restauração de qualquer job operacional:
+A integração bounded existente confirma o descarte de JSON inválido e a saída do evento válido. Um segundo cenário bounded publica JSON inválido, timestamps incoerentes, uma identidade válida, uma cópia revisada com ingestão e offset diferentes, a mesma hora em outra localidade e um instante novo na primeira localidade. Ele aguarda `FINISHED` e compara os JSON do PrintSink e a auditoria QA por identidade.
+
+O cenário TTL sobe um job QA não bounded com TTL de 20 segundos, publica um evento histórico válido, descarta uma cópia perto do fim do prazo e aceita outra após o deadline original. A segunda aceitação ocorre antes do deadline que existiria se a consulta duplicada renovasse o estado; assim, a prova cobre processing time, replay e ausência de refresh. A execução usa bundle de tamanho 1 e tempo de 1000 ms somente no job QA. Os flags `--qa-audit` e `--qa-dedup-ttl-seconds` exigem nome `weather-flink-qa-<id>` e grupo com o mesmo prefixo exclusivo, por exemplo `weather-flink-qa-a1b2` e `weather-flink-qa-a1b2-group`. O override de TTL aceita apenas 2 a 60 segundos; o job operacional mantém 86.400 segundos sem override por ambiente.
+
+Esses testes cancelam somente o próprio JobID. Antes de iniciar a integração, confira `/jobs/overview` e coordene a pausa/restauração de um job operacional conhecido se ele ocupar o único slot:
 
 ~~~powershell
 $env:FLINK_INTEGRATION = "1"
