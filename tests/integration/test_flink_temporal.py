@@ -9,7 +9,9 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.error import HTTPError
+from urllib.parse import quote, unquote, urlparse
+from urllib.request import Request, urlopen
 
 import pytest
 from test_kafka_flink import (
@@ -28,6 +30,7 @@ from test_kafka_flink import (
 pytestmark = pytest.mark.integration
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_REST_URL = "http://127.0.0.1:8081"
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _SLIDE_MS = 300_000
 _WINDOW_MS = 1_800_000
@@ -294,24 +297,56 @@ def _assert_no_active_jobs() -> None:
         pytest.skip(f"active Flink job(s) require coordination before the one-slot test: {names}")
 
 
+def _wait_for_new_active_qa_job_id(
+    job_name: str, excluded_job_ids: set[str], deadline_seconds: float = 10
+) -> str | None:
+    deadline = time.monotonic() + deadline_seconds
+    while time.monotonic() < deadline:
+        candidates = [
+            str(job.get("jid") or job.get("id"))
+            for job in _jobs_overview()
+            if job.get("name") == job_name
+            and job.get("state") in _ACTIVE_JOB_STATES
+            and (job.get("jid") or job.get("id"))
+            and str(job.get("jid") or job.get("id")) not in excluded_job_ids
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+        time.sleep(0.2)
+    return None
+
+
 def _submit_unbounded_qa_job(
     job_name: str,
     group_id: str,
     *,
     submission: dict[str, str | None],
+    checkpoint_interval_seconds: int | None = None,
+    restore_metadata: str | None = None,
 ) -> str:
-    result = subprocess.run(
+    existing_job_ids = set()
+    if restore_metadata is not None:
+        existing_job_ids = {
+            str(job.get("jid") or job.get("id"))
+            for job in _jobs_overview()
+            if job.get("name") == job_name and (job.get("jid") or job.get("id"))
+        }
+    command = [
+        "docker",
+        "compose",
+        "exec",
+        "-T",
+        "-u",
+        "flink",
+        "flink-jobmanager",
+        "/opt/flink/bin/flink",
+        "run",
+        "-d",
+    ]
+    if restore_metadata is not None:
+        command.extend(["-s", restore_metadata])
+    command.extend(
         [
-            "docker",
-            "compose",
-            "exec",
-            "-T",
-            "-u",
-            "flink",
-            "flink-jobmanager",
-            "/opt/flink/bin/flink",
-            "run",
-            "-d",
             "-py",
             "/opt/climate/src/climate_logistics/flink_job.py",
             "--job-name",
@@ -319,18 +354,52 @@ def _submit_unbounded_qa_job(
             "--group-id",
             group_id,
             "--qa-audit",
-        ],
-        cwd=_REPOSITORY_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=45,
+        ]
     )
+    if checkpoint_interval_seconds is not None:
+        command.extend(
+            ["--qa-checkpoint-interval-seconds", str(checkpoint_interval_seconds)]
+        )
+
+    try:
+        result = subprocess.run(
+            command,
+            cwd=_REPOSITORY_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        stdout = getattr(exc, "stdout", None) or getattr(exc, "output", None) or ""
+        stderr = getattr(exc, "stderr", None) or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode("utf-8", errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        match = _JOB_ID_PATTERN.search(f"{stdout}\n{stderr}")
+        job_id = match.group(1) if match else None
+        if job_id in existing_job_ids:
+            job_id = None
+        if job_id is None and restore_metadata is not None:
+            job_id = _wait_for_new_active_qa_job_id(job_name, existing_job_ids)
+        if job_id is not None:
+            submission["job_id"] = job_id
+        raise
     match = _JOB_ID_PATTERN.search(result.stdout + "\n" + result.stderr)
-    job_id = match.group(1) if match else _wait_for_own_job_id(job_name, None)
+    job_id = match.group(1) if match else None
+    if job_id in existing_job_ids:
+        job_id = None
+    if job_id is None:
+        job_id = _wait_for_new_active_qa_job_id(job_name, existing_job_ids)
     if job_id is None:
         raise AssertionError(f"Flink did not expose the submitted QA job {job_name}")
     submission["job_id"] = job_id
+    if result.returncode != 0:
+        output = result.stdout + "\n" + result.stderr
+        raise AssertionError(
+            f"Flink CLI failed while submitting this QA job: {output[-3000:]}"
+        )
 
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
@@ -341,6 +410,127 @@ def _submit_unbounded_qa_job(
             raise AssertionError(f"unbounded QA job ended {state} during startup")
         time.sleep(0.25)
     raise AssertionError(f"unbounded QA job {job_name} did not reach RUNNING")
+
+
+def _wait_for_completed_checkpoint(
+    job_id: str,
+    *,
+    after_timestamp_ms: int,
+    after_checkpoint_id: int | None = None,
+    deadline_seconds: float = 25,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + deadline_seconds
+    last_report: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        last_report = _rest_json(f"/jobs/{job_id}/checkpoints")
+        checkpoint = last_report.get("latest", {}).get("completed")
+        if checkpoint is not None:
+            checkpoint_id = int(checkpoint["id"])
+            trigger_timestamp_ms = int(checkpoint["trigger_timestamp"])
+            if (
+                trigger_timestamp_ms >= after_timestamp_ms
+                and (after_checkpoint_id is None or checkpoint_id != after_checkpoint_id)
+            ):
+                assert int(last_report.get("counts", {}).get("completed", 0)) >= 1
+                return checkpoint
+        time.sleep(0.2)
+    raise AssertionError(
+        "no completed checkpoint triggered after the required point; "
+        f"job={job_id}, report={last_report}"
+    )
+
+
+def _trigger_checkpoint(job_id: str) -> dict[str, Any]:
+    request = Request(
+        f"{_REST_URL}/jobs/{job_id}/checkpoints",
+        data=json.dumps({"checkpointType": "CONFIGURED"}).encode("utf-8"),
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            result = json.loads(response.read())
+    except HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        message = details.lower()
+        if "checkpoint" in message and any(
+            phrase in message for phrase in ("already", "in progress", "pending")
+        ):
+            return {"already_in_progress": True}
+        raise AssertionError(f"Flink rejected a checkpoint trigger: {details}") from exc
+    if not result.get("request-id") and not result.get("requestId"):
+        raise AssertionError(f"Flink did not acknowledge the checkpoint trigger: {result}")
+    return result
+
+
+def _cancel_own_qa_job_via_rest(job_id: str, job_name: str) -> None:
+    job = _rest_json(f"/jobs/{job_id}")
+    if job.get("name") != job_name:
+        raise AssertionError(f"refusing to cancel unexpected job id {job_id}")
+    if job.get("state") not in _ACTIVE_JOB_STATES:
+        return
+    request = Request(
+        f"{_REST_URL}/jobs/{job_id}?mode=cancel",
+        headers={"Accept": "application/json"},
+        method="PATCH",
+    )
+    with urlopen(request, timeout=5) as response:
+        if response.status != 202:
+            raise AssertionError(f"Flink did not accept cancellation for {job_id}")
+
+
+def _wait_for_restored_checkpoint(
+    job_id: str, expected_checkpoint_id: int, deadline_seconds: float = 30
+) -> dict[str, Any]:
+    deadline = time.monotonic() + deadline_seconds
+    last_report: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        last_report = _rest_json(f"/jobs/{job_id}/checkpoints")
+        restored = last_report.get("latest", {}).get("restored")
+        if restored is not None and int(restored.get("id", -1)) == expected_checkpoint_id:
+            return restored
+        time.sleep(0.2)
+    raise AssertionError(
+        f"job {job_id} did not report restored checkpoint {expected_checkpoint_id}: "
+        f"{last_report}"
+    )
+
+
+def _checkpoint_metadata_path(checkpoint: dict[str, Any]) -> str:
+    external_path = str(checkpoint["external_path"])
+    parsed = urlparse(external_path)
+    if parsed.scheme != "file":
+        raise AssertionError(f"checkpoint must use shared file storage: {external_path}")
+    checkpoint_path = unquote(parsed.path).rstrip("/")
+    return f"{checkpoint_path}/_metadata"
+
+
+def _assert_checkpoint_readable_on_both_flink_nodes(metadata_path: str) -> None:
+    for service in ("flink-jobmanager", "flink-taskmanager"):
+        subprocess.run(
+            ["docker", "compose", "exec", "-T", service, "test", "-r", metadata_path],
+            cwd=_REPOSITORY_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+
+def _assert_jobmanager_retains_two_checkpoints() -> None:
+    configuration = _rest_json("/jobmanager/config")
+    if isinstance(configuration, list):
+        entries = configuration
+    elif isinstance(configuration, dict):
+        entries = configuration.get("config", [])
+    else:
+        raise AssertionError(f"unexpected JobManager config response: {configuration}")
+    values = {
+        str(entry.get("key")): str(entry.get("value"))
+        for entry in entries
+        if isinstance(entry, dict)
+    }
+    assert values.get("execution.checkpointing.num-retained") == "2"
 
 
 def _cleanup_unbounded_qa_job(
@@ -864,3 +1054,260 @@ def test_real_flink_unbounded_partial_and_fully_late_event_time_behavior():
         ), "fully late event must not reopen or revise closed windows"
     finally:
         _cleanup_unbounded_qa_job(job_name, job_id, submission)
+
+
+@pytest.mark.integration
+def test_real_flink_restore_replays_post_checkpoint_offset_and_preserves_state():
+    if os.environ.get("FLINK_INTEGRATION") != "1":
+        pytest.skip("set FLINK_INTEGRATION=1 to exercise Kafka and the Flink cluster")
+    _assert_no_active_jobs()
+
+    running_services = subprocess.run(
+        ["docker", "compose", "ps", "--status", "running", "--services"],
+        cwd=_REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    ).stdout.split()
+    if "producer" in running_services:
+        pytest.skip("pause the known Producer before testing historical unbounded watermarks")
+    _assert_jobmanager_retains_two_checkpoints()
+
+    suffix = uuid.uuid4().hex[:12]
+    job_name = f"weather-flink-qa-{suffix}"
+    group_id = f"{job_name}-group"
+    location = f"QA-CHECKPOINT-{suffix}"
+    sentinel_location = f"QA-CHECKPOINT-SENTINEL-{suffix}"
+    event_a = datetime(2020, 1, 1, 12, 10, tzinfo=UTC)
+    event_b = event_a - timedelta(minutes=1)
+    sentinel = event_a + timedelta(minutes=40)
+    event_a_ms = _epoch_millis(event_a)
+    event_b_ms = _epoch_millis(event_b)
+    sentinel_ms = _epoch_millis(sentinel)
+    job_started_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    initial_submission: dict[str, str | None] = {"job_id": None}
+    restored_submission: dict[str, str | None] = {"job_id": None}
+    initial_job_id: str | None = None
+    restored_job_id: str | None = None
+    checkpoint_id: int | None = None
+
+    try:
+        initial_job_id = _submit_unbounded_qa_job(
+            job_name,
+            group_id,
+            submission=initial_submission,
+            checkpoint_interval_seconds=10,
+        )
+        _wait_for_source_offsets(initial_job_id)
+
+        _publish_temporal_records(
+            [
+                _publish_weather(
+                    location,
+                    event_a,
+                    event_a,
+                    temperature=20.0,
+                    precipitation=2.0,
+                    interval=900,
+                    wind_speed=40.0,
+                    wind_gust=55.0,
+                    visibility=9_000.0,
+                )
+            ]
+        )
+        _wait_for_qa_audit_count(
+            job_started_at,
+            location_id=location,
+            event_timestamp=_timestamp_text(event_a),
+            status="accepted",
+            count=1,
+        )
+        accepted_a_at_ms = _epoch_millis(datetime.now(UTC))
+        checkpoint_c = _wait_for_completed_checkpoint(
+            initial_job_id,
+            after_timestamp_ms=accepted_a_at_ms,
+            deadline_seconds=25,
+        )
+        checkpoint_id = int(checkpoint_c["id"])
+        checkpoint_captured_at = time.monotonic()
+        metadata_path = _checkpoint_metadata_path(checkpoint_c)
+        _assert_checkpoint_readable_on_both_flink_nodes(metadata_path)
+        source_offsets_at_checkpoint = _source_offsets(initial_job_id)
+
+        _publish_temporal_records(
+            [
+                _publish_weather(
+                    location,
+                    event_b,
+                    event_b,
+                    temperature=30.0,
+                    precipitation=1.0,
+                    interval=300,
+                    wind_speed=50.0,
+                    wind_gust=60.0,
+                    visibility=6_000.0,
+                )
+            ]
+        )
+        _wait_for_qa_audit_count(
+            job_started_at,
+            location_id=location,
+            event_timestamp=_timestamp_text(event_b),
+            status="accepted",
+            count=1,
+        )
+        offsets_after_b = _wait_for_offset_advance(
+            initial_job_id, source_offsets_at_checkpoint
+        )
+        assert any(
+            offsets_after_b.get(metric_id, -1) > offset
+            for metric_id, offset in source_offsets_at_checkpoint.items()
+        )
+        accepted_b_at_ms = _epoch_millis(datetime.now(UTC))
+        _trigger_checkpoint(initial_job_id)
+        checkpoint_after_b = _wait_for_completed_checkpoint(
+            initial_job_id,
+            after_timestamp_ms=accepted_b_at_ms,
+            after_checkpoint_id=checkpoint_id,
+            deadline_seconds=17,
+        )
+        assert int(checkpoint_after_b["id"]) != checkpoint_id
+        assert time.monotonic() - checkpoint_captured_at < 19
+
+        _cancel_own_qa_job_via_rest(initial_job_id, job_name)
+        cancellation_deadline = time.monotonic() + 10
+        while time.monotonic() < cancellation_deadline:
+            if _rest_json(f"/jobs/{initial_job_id}").get("state") == "CANCELED":
+                break
+            time.sleep(0.2)
+        assert _rest_json(f"/jobs/{initial_job_id}").get("state") == "CANCELED"
+        assert time.monotonic() - checkpoint_captured_at < 20
+        _assert_checkpoint_readable_on_both_flink_nodes(metadata_path)
+
+        restored_started_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        restored_started_at_ms = _epoch_millis(datetime.now(UTC))
+        restored_job_id = _submit_unbounded_qa_job(
+            job_name,
+            group_id,
+            submission=restored_submission,
+            checkpoint_interval_seconds=10,
+            restore_metadata=metadata_path,
+        )
+        assert restored_job_id != initial_job_id
+        restored_checkpoint = _wait_for_restored_checkpoint(
+            restored_job_id, checkpoint_id
+        )
+        assert int(restored_checkpoint["id"]) == checkpoint_id
+
+        _wait_for_qa_audit_count(
+            restored_started_at,
+            location_id=location,
+            event_timestamp=_timestamp_text(event_b),
+            status="accepted",
+            count=1,
+        )
+        restored_offsets = _wait_for_source_offsets(restored_job_id)
+        assert any(
+            restored_offsets.get(metric_id, -1) > offset
+            for metric_id, offset in source_offsets_at_checkpoint.items()
+        )
+
+        _publish_temporal_records(
+            [
+                _publish_weather(
+                    location,
+                    event_a,
+                    event_a + timedelta(seconds=30),
+                    temperature=99.0,
+                    precipitation=999.0,
+                    interval=1,
+                    wind_speed=99.0,
+                    wind_gust=100.0,
+                    visibility=1.0,
+                )
+            ]
+        )
+        _wait_for_qa_audit_count(
+            restored_started_at,
+            location_id=location,
+            event_timestamp=_timestamp_text(event_a),
+            status="duplicate",
+            count=1,
+        )
+
+        _publish_temporal_records(
+            [
+                _publish_weather(
+                    sentinel_location,
+                    sentinel,
+                    sentinel,
+                    temperature=10.0,
+                    precipitation=0.0,
+                    interval=900,
+                    wind_speed=5.0,
+                    wind_gust=8.0,
+                    visibility=10_000.0,
+                )
+            ]
+        )
+        _wait_for_qa_audit_count(
+            restored_started_at,
+            location_id=sentinel_location,
+            event_timestamp=_timestamp_text(sentinel),
+            status="accepted",
+            count=1,
+        )
+        _wait_for_watermark(restored_job_id, sentinel_ms - _OUT_OF_ORDER_MS - 1)
+
+        starts_ab = list(
+            range(
+                event_a_ms - _WINDOW_MS,
+                event_a_ms + 1,
+                _SLIDE_MS,
+            )
+        )
+        expected = _expected_pair_windows(
+            location_id=location,
+            event_a_ms=event_a_ms,
+            event_b_ms=event_b_ms,
+            starts_ms=starts_ab,
+        )
+        logs, _ = _wait_for_metric_keys(
+            restored_started_at,
+            {location},
+            set(expected),
+        )
+        _assert_metric_results(_metric_records(logs, {location}), expected)
+        assert any(metric["event_count"] == 2 for metric in expected.values())
+
+        _trigger_checkpoint(restored_job_id)
+        checkpoint_after_restore = _wait_for_completed_checkpoint(
+            restored_job_id,
+            after_timestamp_ms=restored_started_at_ms,
+            deadline_seconds=30,
+        )
+        assert int(checkpoint_after_restore["trigger_timestamp"]) >= restored_started_at_ms
+    finally:
+        known_job_ids = {
+            str(job_id)
+            for job_id in (
+                initial_job_id,
+                restored_job_id,
+                initial_submission.get("job_id"),
+                restored_submission.get("job_id"),
+            )
+            if job_id
+        }
+        if initial_job_id is None and initial_submission.get("job_id") is None:
+            fallback_initial_id = _wait_for_new_active_qa_job_id(job_name, set())
+            if fallback_initial_id is not None:
+                known_job_ids.add(fallback_initial_id)
+        if restored_job_id is None and restored_submission.get("job_id") is None:
+            fallback_restored_id = _wait_for_new_active_qa_job_id(
+                job_name, known_job_ids
+            )
+            if fallback_restored_id is not None:
+                known_job_ids.add(fallback_restored_id)
+        for own_job_id in known_job_ids:
+            _cancel_own_active_job(own_job_id)

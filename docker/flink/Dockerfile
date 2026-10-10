@@ -71,6 +71,9 @@ RUN printf '%s\n' /opt/python3.11/lib > /etc/ld.so.conf.d/python3.11.conf \
     && ldconfig \
     && /opt/python3.11/bin/python3.11 -c "import bz2, ctypes, lzma, sqlite3, ssl, zlib"
 
+RUN mkdir -p /opt/flink/checkpoints \
+    && chown flink:flink /opt/flink/checkpoints
+
 COPY --chown=flink:flink src /opt/climate/src
 
 ENV PATH="/opt/python3.11/bin:${PATH}" \

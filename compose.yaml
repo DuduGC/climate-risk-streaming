@@ -55,6 +55,7 @@ services:
         rest.address: flink-jobmanager
         jobmanager.memory.process.size: 768m
         parallelism.default: 1
+        execution.checkpointing.num-retained: 2
         python.client.executable: /opt/python3.11/bin/python3.11
         python.executable: /opt/python3.11/bin/python3.11
         taskmanager.numberOfTaskSlots: 1
@@ -62,6 +63,7 @@ services:
       - 127.0.0.1:8081:8081
     volumes:
       - ./docker/flink/healthcheck.sh:/usr/local/bin/flink-healthcheck.sh:ro
+      - flink-checkpoints:/opt/flink/checkpoints
     healthcheck:
       test: [CMD-SHELL, "sh /usr/local/bin/flink-healthcheck.sh jobmanager"]
       interval: 10s
@@ -87,10 +89,12 @@ services:
         taskmanager.memory.process.size: 1280m
         taskmanager.numberOfTaskSlots: 1
         parallelism.default: 1
+        execution.checkpointing.num-retained: 2
         python.client.executable: /opt/python3.11/bin/python3.11
         python.executable: /opt/python3.11/bin/python3.11
     volumes:
       - ./docker/flink/healthcheck.sh:/usr/local/bin/flink-healthcheck.sh:ro
+      - flink-checkpoints:/opt/flink/checkpoints
     depends_on:
       flink-jobmanager:
         condition: service_healthy
@@ -145,5 +149,6 @@ services:
         condition: service_healthy
 
 volumes:
+  flink-checkpoints:
   kafka-data:
   postgres-data:

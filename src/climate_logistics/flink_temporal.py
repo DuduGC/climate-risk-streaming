@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 
-from pyflink.common import Duration, Time, Types, WatermarkStrategy
+from pyflink.common import Configuration, Duration, Time, Types, WatermarkStrategy
+from pyflink.common.restart_strategy import RestartStrategies
 from pyflink.common.watermark_strategy import TimestampAssigner
-from pyflink.datastream import DataStream
+from pyflink.datastream import DataStream, StreamExecutionEnvironment
+from pyflink.datastream.checkpointing_mode import CheckpointingMode
 from pyflink.datastream.functions import (
     AggregateFunction,
     MapFunction,
@@ -91,6 +93,36 @@ class CountLateWeather(MapFunction):
     def map(self, value) -> bool:
         self._late_records.inc()
         return True
+
+
+def configure_checkpointing(
+    env: StreamExecutionEnvironment, *, interval_seconds: int = 60
+) -> None:
+    """Configure filesystem checkpoints and bounded recovery for this job."""
+    if isinstance(interval_seconds, bool) or not isinstance(interval_seconds, int):
+        raise ValueError("checkpoint_interval_seconds deve ser um inteiro")
+    if not 5 <= interval_seconds <= 60:
+        raise ValueError("checkpoint_interval_seconds deve estar entre 5 e 60 segundos")
+
+    configuration = Configuration()
+    configuration.set_string("execution.checkpointing.storage", "filesystem")
+    configuration.set_string(
+        "execution.checkpointing.dir", "file:///opt/flink/checkpoints"
+    )
+    configuration.set_string(
+        "execution.checkpointing.externalized-checkpoint-retention",
+        "RETAIN_ON_CANCELLATION",
+    )
+    configuration.set_integer("execution.checkpointing.num-retained", 2)
+    env.configure(configuration)
+
+    env.enable_checkpointing(interval_seconds * 1_000, CheckpointingMode.EXACTLY_ONCE)
+    checkpoint_config = env.get_checkpoint_config()
+    checkpoint_config.set_checkpoint_timeout(120_000)
+    checkpoint_config.set_min_pause_between_checkpoints(10_000)
+    checkpoint_config.set_max_concurrent_checkpoints(1)
+    checkpoint_config.set_tolerable_checkpoint_failure_number(0)
+    env.set_restart_strategy(RestartStrategies.fixed_delay_restart(3, 10_000))
 
 
 def attach_temporal_metrics(stream: DataStream) -> DataStream:

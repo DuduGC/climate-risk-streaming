@@ -22,7 +22,10 @@ from climate_logistics.data_quality import (
     event_identity,
     validate_event_time,
 )
-from climate_logistics.flink_temporal import attach_temporal_metrics
+from climate_logistics.flink_temporal import (
+    attach_temporal_metrics,
+    configure_checkpointing,
+)
 from climate_logistics.weather_parser import (
     WEATHER_FIELDS,
     WEATHER_KINDS,
@@ -51,6 +54,7 @@ class JobSettings:
     bounded: bool = False
     dedup_ttl_seconds: int = DEFAULT_DEDUP_TTL_SECONDS
     qa_audit: bool = False
+    checkpoint_interval_seconds: int = 60
 
     def __post_init__(self) -> None:
         if isinstance(self.dedup_ttl_seconds, bool) or not isinstance(
@@ -62,6 +66,18 @@ class JobSettings:
                 raise ValueError("somente QA pode alterar o TTL operacional de deduplicação")
             if not 2 <= self.dedup_ttl_seconds <= 60:
                 raise ValueError("TTL de deduplicação QA deve estar entre 2 e 60 segundos")
+        if isinstance(self.checkpoint_interval_seconds, bool) or not isinstance(
+            self.checkpoint_interval_seconds, int
+        ):
+            raise ValueError("checkpoint_interval_seconds deve ser um inteiro")
+        if not 5 <= self.checkpoint_interval_seconds <= 60:
+            raise ValueError(
+                "checkpoint_interval_seconds deve estar entre 5 e 60 segundos"
+            )
+        if self.checkpoint_interval_seconds != 60 and not self.qa_audit:
+            raise ValueError(
+                "somente QA pode alterar o intervalo operacional de checkpoint"
+            )
 
 
 class _ParseWeatherEvent(FlatMapFunction):
@@ -239,6 +255,9 @@ def build_pipeline(settings: JobSettings) -> StreamExecutionEnvironment:
         execution_configuration.set_integer("python.fn-execution.bundle.size", 1)
         execution_configuration.set_integer("python.fn-execution.bundle.time", 1000)
     env.configure(execution_configuration)
+    configure_checkpointing(
+        env, interval_seconds=settings.checkpoint_interval_seconds
+    )
     env.set_parallelism(1)
     env.get_config().set_auto_watermark_interval(200)
 
@@ -320,6 +339,12 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="emite auditoria mínima de aceitos, rejeitados e duplicados para QA",
     )
+    parser.add_argument(
+        "--qa-checkpoint-interval-seconds",
+        type=int,
+        choices=range(5, 61),
+        help="intervalo reduzido de checkpoint exclusivo de QA (5 a 60 segundos)",
+    )
     return parser.parse_args(argv)
 
 
@@ -328,8 +353,19 @@ def _validate_execution_identity(
     settings: JobSettings,
     *,
     group_id: str | None = None,
+    checkpoint_interval_override: bool = False,
 ) -> None:
-    if not settings.qa_audit and settings.dedup_ttl_seconds == DEFAULT_DEDUP_TTL_SECONDS:
+    if checkpoint_interval_override and not settings.qa_audit:
+        raise ValueError(
+            "--qa-checkpoint-interval-seconds exige modo QA com --qa-audit"
+        )
+
+    if (
+        not settings.qa_audit
+        and settings.dedup_ttl_seconds == DEFAULT_DEDUP_TTL_SECONDS
+        and settings.checkpoint_interval_seconds == 60
+        and not checkpoint_interval_override
+    ):
         return
 
     effective_group_id = settings.group_id if group_id is None else group_id
@@ -347,6 +383,7 @@ def _validate_execution_identity(
 
 def main(argv: list[str] | None = None) -> int:
     args = _arguments(argv)
+    checkpoint_interval_override = args.qa_checkpoint_interval_seconds is not None
     settings = JobSettings(
         bootstrap_servers=args.bootstrap_servers,
         group_id=args.group_id,
@@ -357,6 +394,16 @@ def main(argv: list[str] | None = None) -> int:
             else args.qa_dedup_ttl_seconds
         ),
         qa_audit=args.qa_audit,
+        checkpoint_interval_seconds=(
+            60
+            if args.qa_checkpoint_interval_seconds is None
+            else args.qa_checkpoint_interval_seconds
+        ),
+    )
+    _validate_execution_identity(
+        args.job_name,
+        settings,
+        checkpoint_interval_override=checkpoint_interval_override,
     )
     execute(args.job_name, settings)
     return 0
