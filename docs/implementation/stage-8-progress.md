@@ -44,3 +44,7 @@ Usuário aprovou o plano em2026-10-11. Task1 delegada aoagente stage8_records_im
 ## Estado atual — tarefas 1 e 2 aprovadas
 
 Task1 commit a88fb65: contrato puro, SQL idempotente e schema PostgreSQL; testes reais de migração/replay/roles/cold-init aprovados. Task2 commit982f485: sinks JDBC/Kafka nativos, configuração e wiring; SDK83, suíte geral595/Ruff/build aprovados, nós saudáveis. Revisão independente de cada tarefa sem P1/P2 pendentes. Task3 delegada a stage8_delivery_impl GPT-6 Luna Max: provas de entrega real, replay, migração7→8 e falhas. Principal coordena o slot único e QA. Operação7 preservada em CP164; operação8 será restaurada no aceite final. Etapa8 ainda não concluída; etapa9 não iniciada.
+
+## Etapa 8 concluída
+
+Três tarefas e revisão final aprovadas. Root: 619 testes Python3.11/Ruff, SDK83 e quatro runtimes delivery/replay/legacy/faultJDBC/faultKafka aprovados. Operação8 RUNNING no job257be545438f67675ad4b7f5a235eb5a, restored164→completed165/169 semfalhas; Producerentregou3, métricasAPI2026nas3localidades. Backloghistóricodefixturesreprocessado explicitamenteidentificado, sematribuir66alertassimulado­sàAPIatual. Aceitecompleto:stage-8-acceptance.md. Etapa9pendente, escopoMVPpreservado.

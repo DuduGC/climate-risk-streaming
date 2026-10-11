@@ -84,3 +84,7 @@ Próximo passo após aprovação desta spec: plano escrito com tarefas implement
 Detalhamento técnico no plano: serializerJava mínimo preserva key/value do KafkaSink nativo; buildJava17 restrito ao builder. UPSERTs idênticos são aceitos; alteração de valores para a mesma identidade é recusada transacionalmente para evitar alerta stale, sem adicionar protocolo de revogação ou backfill. Esses detalhes concretizam o contrato determinístico aprovado.
 
 Ruling de compatibilidade na execução: o wrapper Python1.20.3 chama factoryprivada removida doJDBC3.3.0-1.20 (NoSuchMethodreproduzido). A ponte mínimaBusinessJdbcStatementBuilder<Row> usaPreparedStatement2campos efactoryJava públicaJdbcSink, comwrapperPythonexportado; sempatchSDK, downgrade outransportepróprio. Arquitetura/semântica/parametrizaçãodossinks aprovados preservadas.
+
+## Status de execução
+
+Spec implementada e aceita em 2026-10-11. Três tarefas concluídas por agentes GPT-6 Luna Max, revisões independentes aprovadas, quatro cenários reais aprovados e operação8 retomada pelo checkpoint164. Aceite e limites documentados em docs/implementation/stage-8-acceptance.md; etapa9 ainda não iniciada.
