@@ -1,6 +1,6 @@
 # Etapa 7 — Risk Engine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Calcular risco determinístico e explicável por janela/localidade e comprovar integração e compatibilidade de checkpoint com a etapa6.
 
@@ -31,14 +31,14 @@
 
 ## Preparação e checkpoint legado — principal
 
-- [ ] Confirmar base7ae024e e mudanças apenas documentais; criar stage-7-brief.md/ledger exclusivo com autorizações e preflight de interfaces.
-- [ ] Confirmar baseline suíte geral/SDK/Ruff nos runtimes existentes, jobs/serviços e imagem etapa6. Reutilizar checkout dedicado conforme aprovação anterior; preservar .env/volumes.
-- [ ] ANTES de rebuild/deploy/sourcewiring etapa7, capturar o checkpoint operacional etapa6 atual e cancelar somente seu JobID conhecido, conservando metadata para restauração. Se já parado, subir somente infraestrutura e submeter grafo etapa6 conhecido.
-- [ ] Pausar Producer em try/finally durante QA histórico. Submeter QA etapa6/latest com nome/grupo exclusivo e checkpoint15s permitido (intervaloQA5–60 existente). Usar parser/state/janelas reais do código legado, sem ramo risk.
-- [ ] Publicar quatro perfis em2020-01-01T12:10Z com ingestão original coerente, IDs exclusivos: LOW(precip0/vento5/rajada10/vis10000), MEDIUM(precip0.5mm/900s=2mmh, outros baixos), HIGH(vento40, chuva0/rajada10/vis10000), CRITICAL(vis199, chuva0/vento5/rajada10). Temp20/interval900 para todos; campos raw restantes válidos.
-- [ ] Observar aceite dos quatro; escolher checkpoint COMPLETED disparado após todos os aceites, com janelas abertas. Guardar URI/_metadata, id, jobid, nome/grupo, perfis/IDs/payloads e parâmetros em manifesto JSON .venv/stage7-legacy-checkpoint.json, sem secrets.
-- [ ] Confirmar metadata legível nos dois nós e marcador de grafo antigo (HEAD/imagem/comando sem ramo risk) no manifesto. Cancelar somente QA próprio, aguardando terminal para liberar o slot; preservar checkpoint. Restaurar Producer; se necessário manter operação temporária com imagem/grafo etapa6 e checkpoint operacional guardado durante a implementação.
-- [ ] Capturar evidência/hash do código legado antes de qualquer implementação no job. Imagem antiga fica disponível até prova de migração; não remover caches/volumes nem chamar allowNonRestoredState.
+- [x] Confirmar base7ae024e e mudanças apenas documentais; criar stage-7-brief.md/ledger exclusivo com autorizações e preflight de interfaces.
+- [x] Confirmar baseline suíte geral/SDK/Ruff nos runtimes existentes, jobs/serviços e imagem etapa6. Reutilizar checkout dedicado conforme aprovação anterior; preservar .env/volumes.
+- [x] ANTES de rebuild/deploy/sourcewiring etapa7, capturar o checkpoint operacional etapa6 atual e cancelar somente seu JobID conhecido, conservando metadata para restauração. Se já parado, subir somente infraestrutura e submeter grafo etapa6 conhecido.
+- [x] Pausar Producer em try/finally durante QA histórico. Submeter QA etapa6/latest com nome/grupo exclusivo e checkpoint15s permitido (intervaloQA5–60 existente). Usar parser/state/janelas reais do código legado, sem ramo risk.
+- [x] Publicar quatro perfis em2020-01-01T12:10Z com ingestão original coerente, IDs exclusivos: LOW(precip0/vento5/rajada10/vis10000), MEDIUM(precip0.5mm/900s=2mmh, outros baixos), HIGH(vento40, chuva0/rajada10/vis10000), CRITICAL(vis199, chuva0/vento5/rajada10). Temp20/interval900 para todos; campos raw restantes válidos.
+- [x] Observar aceite dos quatro; escolher checkpoint COMPLETED disparado após todos os aceites, com janelas abertas. Guardar URI/_metadata, id, jobid, nome/grupo, perfis/IDs/payloads e parâmetros em manifesto JSON .venv/stage7-legacy-checkpoint.json, sem secrets.
+- [x] Confirmar metadata legível nos dois nós e marcador de grafo antigo (HEAD/imagem/comando sem ramo risk) no manifesto. Cancelar somente QA próprio, aguardando terminal para liberar o slot; preservar checkpoint. Restaurar Producer; se necessário manter operação temporária com imagem/grafo etapa6 e checkpoint operacional guardado durante a implementação.
+- [x] Capturar evidência/hash do código legado antes de qualquer implementação no job. Imagem antiga fica disponível até prova de migração; não remover caches/volumes nem chamar allowNonRestoredState.
 
 ## Tarefa única — motor puro, ramo Flink e provas
 
@@ -54,31 +54,31 @@
 - flink_risk.AssessWindowRisk(MapFunction): open recebe runtime_context.get_metrics_group(), grupo risk_engine/counter assessed_windows. map(raw: str) -> str faz json.loads, enrich e dumps allow_nan=False; só então inc e return. Erros internos propagam; não capturar genericamente para emitir defaults.
 - attach_risk_assessment(stream: DataStream) -> DataStream com output_type=Types.STRING(), name/uid weather-risk-assessment; build_pipeline mantém weather-metrics e liga print('weather-risk').name/uid weather-risk.
 
-- [ ] Escrever RED dos unitários antes de código: todos16 limiares exatos +math.nextafter imediatamente abaixo/acima; usar inputs isolados para identificar cada score do componente e não esconder erro por max de outro fator.
-- [ ] Cobrir baseline0LOW; chuva2→25MEDIUM; vento40→50HIGH; rajada80→75CRITICAL; vis199→100CRITICAL; vis200→75 e1000→50. Empates e dois fatores50→50HIGH; extremo isolado100 com demais0 mantém100.
-- [ ] Parametrizar classificação0/24/25/49/50/74/75/99/100; invalid -1/101/True/25.0/'25' recusados. Inputs bool/None/string/NaN/inf/negativo e inteiro enorme que não cabe float recusados com erro controlado, sem saídaLOW.
-- [ ] Testar monotonicidade com valores ordenados em cada fator (visibilidade inversa); determinismo de reavaliação, frozen dataclasses e alteração do dict serializado sem alterar RiskAssessment/input. Não acrescentar ferramenta property-testing externa.
-- [ ] Observar RED em Python3.11, implementar tabelas/validação/funções puras mínimas e repetir GREEN. Não arredondar ou aplicar epsilon nos limiares.
-- [ ] Helper contract tests: envelope/keys exatos, schema bool/2, JSONtipo lista e reentrada operation=risk_assessment recusados; event_count0/True e identidade/fronteiras inconsistentes recusados; input17 intacto, output21 exato e scorescomponentes/versão corretos. Compartilhar WINDOW_METRIC_FIELDS se necessário em vez de duplicar definições de schema independentes.
-- [ ] Escrever SDK RED com contexto métrico estrito e callback real: assessed_windows incrementa uma vez por output válido, nenhuma vez em JSONmalformado/contratoinválido/fatorNaN. Validar erro por dado não usado que impeça dumps allow_nan=False também sem contador falso.
-- [ ] Implementar adapter e wiring; não criar imports circulares. SDK graph testa três ramos/sinks e UIDs anteriores, nova saídaSTRING, cache0/assignerLAST/checkpoint settings preservados.
-- [ ] Executar focused pure/SDK GREEN nos runtimes3.11/PyFlink1.20.3; testes SDK exigem imagem com bindPYTHONPATH atual para evitar source stale. Implementador envia comandos ao principal caso Docker/sandbox exija aprovação, sem espera silenciosa.
-- [ ] Integração bounded Kafka comIDs exclusivos e baseUTCfloor5min atual para earliest/backlog. Quatro perfis produzem LOW/MEDIUM/HIGH/CRITICAL em seis janelas cada. Publicar cópia raw revisada extrema deLOW com mesmo instante/ingestão diferente; dedup mantémLOW/count1. Fonte bounded/terminal watermark fecha janelas; comparar multiconjuntoJSON completo21 campos e componentes/ruleversion; original17window_aggregate permanece.
-- [ ] Novo arquivo de integração reutiliza helpers públicos de QA existentes por import local, sem mudar coleta pytest/global e sem duplicar scripts de publisher. SDK filename _sdk evita colisão basename. Publicador one-off do serviço existente; ACK obrigatório, IDs próprios/holder anteswait, finally cleanup apenas próprios e espera de terminal para liberar o slot.
-- [ ] Restaurar MANIFESTOLEGADO etapa6, same job/group e novo JobID, imagem etapa7 após build atualizado; CLI -s <metadata>, semallowNonRestoredState. Snapshot C deve existir; manifest creation e ausência do risk no grafo origem precisam de evidência, não fixture gerada pela etapa7.
-- [ ] Producer pausado em try/finally. Depois de restore, publicar cópias revisadas dos quatro eventos já marcados: exigir auditoria duplicate, não inflação nem troca da avaliação. Publicar sentinel2020T12:50Z emoutra localidade, esperar watermark max-delay-1 viaREST e fechamento das janelas restauradas. Comparar métricas17 e avaliações21 dos quatro perfis com oracle independente hardcoded/tabela aprovada, sem usar calculate_risk para construir o esperado.
-- [ ] REST latest.restored id/URI aponta ao checkpoint6 legado; exigir pelo menosum checkpoint7 novoCOMPLETED e mesmo score/identidade sob replay. Campo assessed_windows é estatística e não contador exatamenteuma vez; verificar registro com deadline, nunca ausência=0.
-- [ ] SDK/unitários/temporais/legados e casos novos aprovados, Ruff0.14.0 e compile/JSONserializer pertinentes. Não contabilizar skip por slot ocupado como PASS; coordenar execução e guardar log durável em .venv para retomada.
-- [ ] README descreve tabela/unidades/comparações, score ordinal/coarse/max policy, ausência de amplificação/simultaneidade e versão, objeto21, preservação de métricas17, replay/PrintSink e contador. Escrever stage-7-implementation-report.md com RED/GREEN/contagens/problemas e provas do principal claramente atribuídas.
-- [ ] Revisão de spec/código por revisor independente; corrigir com o implementador e scoped rereview. Principal confirma runtime/build/JSONcomparação/checkpointlegado antes de commit local.
+- [x] Escrever RED dos unitários antes de código: todos16 limiares exatos +math.nextafter imediatamente abaixo/acima; usar inputs isolados para identificar cada score do componente e não esconder erro por max de outro fator.
+- [x] Cobrir baseline0LOW; chuva2→25MEDIUM; vento40→50HIGH; rajada80→75CRITICAL; vis199→100CRITICAL; vis200→75 e1000→50. Empates e dois fatores50→50HIGH; extremo isolado100 com demais0 mantém100.
+- [x] Parametrizar classificação0/24/25/49/50/74/75/99/100; invalid -1/101/True/25.0/'25' recusados. Inputs bool/None/string/NaN/inf/negativo e inteiro enorme que não cabe float recusados com erro controlado, sem saídaLOW.
+- [x] Testar monotonicidade com valores ordenados em cada fator (visibilidade inversa); determinismo de reavaliação, frozen dataclasses e alteração do dict serializado sem alterar RiskAssessment/input. Não acrescentar ferramenta property-testing externa.
+- [x] Observar RED em Python3.11, implementar tabelas/validação/funções puras mínimas e repetir GREEN. Não arredondar ou aplicar epsilon nos limiares.
+- [x] Helper contract tests: envelope/keys exatos, schema bool/2, JSONtipo lista e reentrada operation=risk_assessment recusados; event_count0/True e identidade/fronteiras inconsistentes recusados; input17 intacto, output21 exato e scorescomponentes/versão corretos. Compartilhar WINDOW_METRIC_FIELDS se necessário em vez de duplicar definições de schema independentes.
+- [x] Escrever SDK RED com contexto métrico estrito e callback real: assessed_windows incrementa uma vez por output válido, nenhuma vez em JSONmalformado/contratoinválido/fatorNaN. Validar erro por dado não usado que impeça dumps allow_nan=False também sem contador falso.
+- [x] Implementar adapter e wiring; não criar imports circulares. SDK graph testa três ramos/sinks e UIDs anteriores, nova saídaSTRING, cache0/assignerLAST/checkpoint settings preservados.
+- [x] Executar focused pure/SDK GREEN nos runtimes3.11/PyFlink1.20.3; testes SDK exigem imagem com bindPYTHONPATH atual para evitar source stale. Implementador envia comandos ao principal caso Docker/sandbox exija aprovação, sem espera silenciosa.
+- [x] Integração bounded Kafka comIDs exclusivos e baseUTCfloor5min atual para earliest/backlog. Quatro perfis produzem LOW/MEDIUM/HIGH/CRITICAL em seis janelas cada. Publicar cópia raw revisada extrema deLOW com mesmo instante/ingestão diferente; dedup mantémLOW/count1. Fonte bounded/terminal watermark fecha janelas; comparar multiconjuntoJSON completo21 campos e componentes/ruleversion; original17window_aggregate permanece.
+- [x] Novo arquivo de integração reutiliza helpers públicos de QA existentes por import local, sem mudar coleta pytest/global e sem duplicar scripts de publisher. SDK filename _sdk evita colisão basename. Publicador one-off do serviço existente; ACK obrigatório, IDs próprios/holder anteswait, finally cleanup apenas próprios e espera de terminal para liberar o slot.
+- [x] Restaurar MANIFESTOLEGADO etapa6, same job/group e novo JobID, imagem etapa7 após build atualizado; CLI -s <metadata>, semallowNonRestoredState. Snapshot C deve existir; manifest creation e ausência do risk no grafo origem precisam de evidência, não fixture gerada pela etapa7.
+- [x] Producer pausado em try/finally. Depois de restore, publicar cópias revisadas dos quatro eventos já marcados: exigir auditoria duplicate, não inflação nem troca da avaliação. Publicar sentinel2020T12:50Z emoutra localidade, esperar watermark max-delay-1 viaREST e fechamento das janelas restauradas. Comparar métricas17 e avaliações21 dos quatro perfis com oracle independente hardcoded/tabela aprovada, sem usar calculate_risk para construir o esperado.
+- [x] REST latest.restored id/URI aponta ao checkpoint6 legado; exigir pelo menosum checkpoint7 novoCOMPLETED e mesmo score/identidade sob replay. Campo assessed_windows é estatística e não contador exatamenteuma vez; verificar registro com deadline, nunca ausência=0.
+- [x] SDK/unitários/temporais/legados e casos novos aprovados, Ruff0.14.0 e compile/JSONserializer pertinentes. Não contabilizar skip por slot ocupado como PASS; coordenar execução e guardar log durável em .venv para retomada.
+- [x] README descreve tabela/unidades/comparações, score ordinal/coarse/max policy, ausência de amplificação/simultaneidade e versão, objeto21, preservação de métricas17, replay/PrintSink e contador. Escrever stage-7-implementation-report.md com RED/GREEN/contagens/problemas e provas do principal claramente atribuídas.
+- [x] Revisão de spec/código por revisor independente; corrigir com o implementador e scoped rereview. Principal confirma runtime/build/JSONcomparação/checkpointlegado antes de commit local.
 
 ## Aceite final — principal
 
-- [ ] Whole-branch review em diff imutável, riscos concretos corrigidos; se modelo de revisão indisponível, usar mais capaz disponível com decisão registrada. Implementador continuaLunaMax.
-- [ ] Baseline371/SDK31 daetapa6 preservado e suites ampliadas aprovadas; fonteJSON/controlada reproduzquatroclasses e migração6→7real. Skips não contam como integração.
-- [ ] Deixar únicojob operacional etapa7, grupo padrão, mesmaspolíticas stateful, com métricas+risco reais de localidades echeckpoint60sCOMPLETED. Producerfuncional e IDs/metadata necessários registrados.
-- [ ] Observar memória/backpressure/state sob carga pequena, UID9999/semPGcredentials noFlink, sem aumento de recurso sem medição. Score explicável e sem fonteinventada para contornarfalhaAPI.
-- [ ] Scan de valores de credenciais sem imprimir, .env ignorado, diff/indexcheck, ledger/progresso/spec/plano atualizados e commitslocais; sempush. Evidências em stage-7-acceptance.md. Só então ETAPA7CONCLUÍDA; etapa8 pendente.
+- [x] Whole-branch review em diff imutável, riscos concretos corrigidos; se modelo de revisão indisponível, usar mais capaz disponível com decisão registrada. Implementador continuaLunaMax.
+- [x] Baseline371/SDK31 daetapa6 preservado e suites ampliadas aprovadas; fonteJSON/controlada reproduzquatroclasses e migração6→7real. Skips não contam como integração.
+- [x] Deixar únicojob operacional etapa7, grupo padrão, mesmaspolíticas stateful, com métricas+risco reais de localidades echeckpoint60sCOMPLETED. Producerfuncional e IDs/metadata necessários registrados.
+- [x] Observar memória/backpressure/state sob carga pequena, UID9999/semPGcredentials noFlink, sem aumento de recurso sem medição. Score explicável e sem fonteinventada para contornarfalhaAPI.
+- [x] Scan de valores de credenciais sem imprimir, .env ignorado, diff/indexcheck, ledger/progresso/spec/plano atualizados e commitslocais; sempush. Evidências em stage-7-acceptance.md. Só então ETAPA7CONCLUÍDA; etapa8 pendente.
 
 ## Self-review e execução
 

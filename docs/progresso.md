@@ -168,3 +168,7 @@ Qualidade temporal e deduplicação com MapState/TTL86400 implementadas por GPT-
 ## Aceite da Etapa 6
 
 Event Time, watermarks, janelas30/5, agregados e checkpoints filesystem implementados e revisados. Final371passed/19skipped; SDK31passed; Ruff aprovado; seis cenários reais comPASS em execuções coordenadas (skip não contado). Operacional762137e915474bd6827555e68fc8e4c6 RUNNING; métricasCT01/RJ01/SP01; checkpoint60s e quatroCPs completos semfalha. Producer3/3 no último ciclo verificado. Evidências/limites/decisões em docs/implementation/stage-6-acceptance.md. Etapa7nãoiniciada.
+
+## Aceite da Etapa 7
+
+Motor de risco determinístico mvp-1 implementado por agente GPT-6 Luna Max; principal orquestrou, revisou e validou. Suíte482passed/22skips, SDK40passed, Ruff aprovado e oito cenários reais comPASS (seisregressões+doisnovos), incluindo checkpoint criado pelo grafo6. Revisãoindependente semP1/P2. Únicojob3caa432342067923b7edae698657e8d6RUNNING, restaurouCP37 e concluiuCP38, com métricas17 e riscos21 deCT01/RJ01/SP01. Producer3/3; checkpoints60s/backpressureok/recursosmantidos. Evidências e limites em docs/implementation/stage-7-acceptance.md. Próxima:Etapa8—sinks de negócio/persistência e alertas, ainda não iniciada.

@@ -92,3 +92,5 @@ Não criar estado adicional para um cálculo puro. Checkpoints recuperam as jane
 Score heurístico ordinal do MVP, sem calibração por tipo de veículo, rota, vulnerabilidade ou prejuízo financeiro. Máximos/mínimos da janela podem vir de observações diferentes; score descreve a condição mais severa observada, sem afirmar simultaneidade. Não há amplificação de múltiplos fatores moderados. Risk rules versionada permite calibrar/alterar depois mantendo rastreabilidade.
 
 Nesta etapa a avaliação é emitida no diagnóstico do Flink. Persistência e publicação em weather.alerts pertencem à etapa8. Checkpoints não tornam PrintSink transacional; logs/avaliações podem repetir após recovery, mantendo identidade e resultado determinístico.
+
+Aceite em2026-10-10: política e contratos aprovados implementados sem mudança de escopo. Evidências finais em docs/implementation/stage-7-acceptance.md; etapa8 não iniciada.
