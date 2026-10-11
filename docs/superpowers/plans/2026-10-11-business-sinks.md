@@ -104,6 +104,6 @@
 
 Spec coberta por três tarefas e preparação/aceite do principal. ReviewFocus1/2 emTask1,3/4 emTask2,5 emTask3; testes reais revalidam todos. Interface de SQL/Row tem exatamente2 parâmetros; alert22 difere da avaliação21 conforme spec. SerializerJava é adaptação de representação, mantém KafkaSink nativo e não cria aplicação/serviço Java. Versões/parametrização definidas após inspeção do SDK instalado e fontes primárias. Nenhum código de produto foi escrito nesta fase.
 
-Método já selecionado pelo usuário: subagent-driven com agentes GPT-6 Luna Max, principal orquestrador/revisor/QA. Plano aguardando revisão e aprovação do usuário antes da execução.
+Método já selecionado pelo usuário: subagent-driven com agentes GPT-6 Luna Max, principal orquestrador/revisor/QA. Plano aprovado pelo usuário em2026-10-11; execução autorizada.
 
 Fontes: [JDBC Flink1.20](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/jdbc/), [Kafka Flink1.20](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/kafka/), [artefatos JDBC versionados](https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-jdbc/), [pgJDBC oficial](https://jdbc.postgresql.org/download/). A interface Python específica foi inspecionada na imagem1.20.3 instalada, incluindo JdbcConnectionOptions.JdbcConnectionOptionsBuilder e KafkaRecordSerializationSchema(j_java_schema).

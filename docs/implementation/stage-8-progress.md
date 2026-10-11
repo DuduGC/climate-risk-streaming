@@ -35,3 +35,7 @@ Self-review: oito critérios da spec têm owners/QA; cincoReviewFocus comtestes 
 Próximaação: revisar/aprovar plano; não pedir escolha de modelo/método novamente, já definidos pelo usuário.
 
 Timeoutdevalidação JDBC explicitado5s via builderJava público, alémconnect/socket10s e retries3; evita default60s por tentativa no orçamentoCP120s. NativeRowSerializer inspecionado, SDKwrappedcustomschema aceita instânciaJava; nenhuma instalação/função deproduto executada. Plano self-review concluído, semgaps/TODO.
+
+## Execução autorizada
+
+Usuário aprovou o plano em2026-10-11. Task1 delegada aoagente stage8_records_impl GPT-6 Luna Max, TDDantesprodução. Ledgerdeexecução específico:stage-8-sdd-progress.md. Legacy7QAe0fc5a701089bc01b09f8de036b5f6b5/CP2 capturado antesnovo grafo; backupimagem/metadata/sourcehashes preservados. Op7temporária f50cfe22e4aaf194d1eea1cb55c0d84b retomada. Baseline482/SDK40/Ruffverificados pelo principal; Task2/3 não iniciadas.

@@ -1,6 +1,6 @@
 # Etapa 8 — PostgreSQL e Kafka Alerts
 
-Status: desenho aprovado pelo usuário em2026-10-11. Plano de implementação escrito, aguardando revisão do usuário antes de execução. Escopo original: tabelas `locations`, `weather_metrics`, `weather_alerts`; Flink → PostgreSQL e Flink → `weather.alerts`. Base: `a26109e`, branch `foundation`.
+Status: desenho aprovado pelo usuário em2026-10-11. Plano de implementação aprovado pelo usuário em2026-10-11; execução iniciada. Escopo original: tabelas `locations`, `weather_metrics`, `weather_alerts`; Flink → PostgreSQL e Flink → `weather.alerts`. Base: `a26109e`, branch `foundation`.
 
 ## Objetivo e responsabilidades
 
