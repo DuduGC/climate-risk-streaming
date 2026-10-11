@@ -82,3 +82,5 @@ Em2026-10-11, checkout limpo e serviços saudáveis após restart; REST inicialm
 Próximo passo após aprovação desta spec: plano escrito com tarefas implementáveis, interfaces e ordem de QA; execução por agentes LunaMax após aprovação do plano. Etapa9 não iniciada.
 
 Detalhamento técnico no plano: serializerJava mínimo preserva key/value do KafkaSink nativo; buildJava17 restrito ao builder. UPSERTs idênticos são aceitos; alteração de valores para a mesma identidade é recusada transacionalmente para evitar alerta stale, sem adicionar protocolo de revogação ou backfill. Esses detalhes concretizam o contrato determinístico aprovado.
+
+Ruling de compatibilidade na execução: o wrapper Python1.20.3 chama factoryprivada removida doJDBC3.3.0-1.20 (NoSuchMethodreproduzido). A ponte mínimaBusinessJdbcStatementBuilder<Row> usaPreparedStatement2campos efactoryJava públicaJdbcSink, comwrapperPythonexportado; sempatchSDK, downgrade outransportepróprio. Arquitetura/semântica/parametrizaçãodossinks aprovados preservadas.

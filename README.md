@@ -1,6 +1,6 @@
 # Climate Logistics Streaming Platform
 
-Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink processa as observações, e PostgreSQL armazenará resultados de negócio. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em weather.raw. A Etapa 4 adicionou o primeiro job Flink; as Etapas 5 e 6 validam coerência temporal, deduplicam eventos e calculam métricas por janela; a Etapa 7 acrescenta uma avaliação determinística de risco climático. Persistência de negócio e consumidor de alertas continuam para etapas posteriores.
+Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink processa as observações, persiste avaliações de risco no PostgreSQL e publica alertas de risco alto no tópico `weather.alerts`. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em `weather.raw`. A Etapa 4 adicionou o primeiro job Flink; as Etapas 5 e 6 validam coerência temporal, deduplicam eventos e calculam métricas por janela; a Etapa 7 acrescenta uma avaliação determinística de risco climático. O consumer de alertas continua reservado à etapa 9.
 
 ## Requisitos e recursos
 
@@ -105,7 +105,7 @@ O transporte usa TLS verificado, não segue redirects, limita cada resposta a 12
 
 ## Producer Python e Kafka
 
-O container Producer consulta RJ01, SP01 e CT01 em sequência, valida os eventos com o contrato existente e publica somente respostas válidas em weather.raw. O bootstrap cria weather.raw e weather.alerts quando ausentes, cada um com três partições e replicação 1; tópicos existentes com topologia incompatível interrompem o startup sem alteração destrutiva. weather.alerts permanece vazio nesta etapa.
+O container Producer consulta RJ01, SP01 e CT01 em sequência, valida os eventos com o contrato existente e publica somente respostas válidas em `weather.raw`. O bootstrap cria `weather.raw` e `weather.alerts` quando ausentes, cada um com três partições e replicação 1; tópicos existentes com topologia incompatível interrompem o startup sem alteração destrutiva. O Producer não publica em `weather.alerts`; esse tópico recebe alertas do sink de negócio do Flink.
 
 O padrão é KAFKA_BOOTSTRAP_SERVERS=kafka:9092 e WEATHER_POLL_INTERVAL_SECONDS=300. O Producer usa somente configuração pública e não recebe credenciais PostgreSQL. Para compilar e iniciar o serviço contínuo:
 
@@ -156,7 +156,7 @@ Depois da validação e da deduplicação, o job usa `event_timestamp` UTC como 
 
 As janelas são deslizantes de 30 minutos, avançam em intervalos de 5 minutos e usam intervalos `[início, fim)` alinhados ao epoch UTC. Cada evento válido participa de seis janelas por `location_id`. As métricas aparecem no PrintSink `weather-metrics` como JSON com início/fim em milissegundos UTC, contagem, média aritmética de temperatura, extremos de vento e visibilidade, intervalos das observações e extremos dos timestamps. A média considera cada observação uma vez, sem ponderação pelo tempo.
 
-`precipitation_max` é a maior precipitação observada na janela, não uma soma. `precipitation_rate_max_mm_per_hour` é a maior projeção `precipitação × 3600 / intervalo_da_observação`, não uma medição acumulada de uma hora. O agregador guarda apenas contagem, soma e extremos escalares; não mantém uma lista de eventos. As métricas são diagnósticas em log e ainda não são persistidas em tópico ou banco.
+`precipitation_max` é a maior precipitação observada na janela, não uma soma. `precipitation_rate_max_mm_per_hour` é a maior projeção `precipitação × 3600 / intervalo_da_observação`, não uma medição acumulada de uma hora. O agregador guarda apenas contagem, soma e extremos escalares; não mantém uma lista de eventos. O PrintSink de métricas temporais continua diagnóstico; o ramo de avaliação de risco alimenta os destinos de negócio descritos abaixo.
 
 O `allowed_lateness` é zero. Os 120 segundos de desordem controlam o avanço do watermark e não reabrem janelas fechadas. Um evento parcialmente atrasado ainda contribui para as janelas abertas; `temporal_stream.late_records` conta uma vez somente quando todas as janelas do evento já fecharam. O payload atrasado é descartado após a contagem, sem tópico novo. Os checkpoints preservam o estado das janelas e da deduplicação para recuperação a partir do snapshot escolhido.
 
@@ -177,7 +177,7 @@ As faixas de `risk_level` são LOW (0–24), MEDIUM (25–49), HIGH (50–74) e 
 
 O score é ordinal e heurístico. A projeção de chuva em mm/h vem da precipitação e do intervalo informado em cada observação; não é chuva acumulada na janela nem probabilidade de prejuízo. Os extremos podem vir de observações diferentes, então a avaliação não afirma que os fatores ocorreram simultaneamente. Temperatura, código meteorológico e contagem de eventos não participam da regra.
 
-O contador `risk_engine.assessed_windows` registra avaliações calculadas e serializadas pelo operador. Ele é uma métrica de processamento: pode reiniciar ou contar novamente após recuperação. O ramo de risco não cria estado próprio e o PrintSink não é transacional; checkpoints preservam as janelas existentes, mas a recuperação pode repetir linhas de diagnóstico. A persistência e a publicação de alertas ficam para etapas posteriores.
+O contador `risk_engine.assessed_windows` registra avaliações calculadas e serializadas pelo operador. Ele é uma métrica de processamento: pode reiniciar ou contar novamente após recuperação. O ramo de risco não cria estado próprio e o PrintSink não é transacional; checkpoints preservam as janelas existentes, mas a recuperação pode repetir linhas de diagnóstico. As escritas de negócio têm garantias separadas, descritas abaixo.
 
 ## Checkpoints e recuperação
 
@@ -226,7 +226,7 @@ Para cancelar, passe somente o JobID que você identificou:
 docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink cancel JOB_ID
 ~~~
 
-O source começa em `earliest`, usa o grupo `weather-flink-ingestion`, não faz auto-commit e roda com paralelismo 1. Com checkpoints habilitados, Flink restaura explicitamente o estado e os offsets gravados no snapshot escolhido; uma submissão sem `-s` inicia de acordo com o initializer do source e pode reler registros retidos no tópico. O diagnóstico é temporário e não grava no PostgreSQL nem em outro tópico.
+O source começa em `earliest`, usa o grupo `weather-flink-ingestion`, não faz auto-commit e roda com paralelismo 1. Com checkpoints habilitados, Flink restaura explicitamente o estado e os offsets gravados no snapshot escolhido; uma submissão sem `-s` inicia de acordo com o initializer do source e pode reler registros retidos no tópico. O ramo de negócio persiste avaliações validadas no PostgreSQL e publica alertas elegíveis em `weather.alerts`; os logs de diagnóstico continuam temporários.
 
 A integração bounded existente confirma o descarte de JSON inválido e a saída do evento válido. Um segundo cenário bounded publica JSON inválido, timestamps incoerentes, uma identidade válida, uma cópia revisada com ingestão e offset diferentes, a mesma hora em outra localidade e um instante novo na primeira localidade. Ele aguarda `FINISHED` e compara os JSON do PrintSink e a auditoria QA por identidade. Os testes temporais bounded comparam as seis participações de cada fixture a um oracle completo, incluindo desordem, deduplicação e a fronteira exclusiva da janela.
 
@@ -290,6 +290,18 @@ Em um volume PostgreSQL novo, `02-business-schema.sh` roda após o bootstrap ini
 docker compose exec -T postgres bash /docker-entrypoint-initdb.d/02-business-schema.sh
 ~~~
 
-A migração cria `climate.locations`, `climate.weather_metrics` e `climate.weather_alerts` em uma transação, carrega o seed e concede à role da aplicação leitura da dimensão e leitura/escrita das tabelas de fatos, sem DDL, `DELETE` ou criação de tabelas temporárias. Ela valida o schema versionado e interrompe a transação quando encontra drift. A próxima tarefa conecta os sinks do job a essas tabelas e ao tópico `weather.alerts`.
+A migração cria `climate.locations`, `climate.weather_metrics` e `climate.weather_alerts` em uma transação, carrega o seed e concede à role da aplicação leitura da dimensão e leitura/escrita das tabelas de fatos, sem DDL, `DELETE` ou criação de tabelas temporárias. Ela valida o schema versionado e interrompe a transação quando encontra drift.
 
-A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentaram métricas temporais e avaliação de risco aos logs do Flink. A etapa 8, tarefa 1 prepara o schema PostgreSQL; a tarefa seguinte conecta os sinks do job, e o consumer de alertas continua reservado à etapa 9.
+### Sinks de negócio do Flink
+
+O job operacional envia cada avaliação válida de RJ01, SP01 ou CT01 a `climate.weather_metrics`. Um único UPSERT SQL grava a avaliação e, quando o score é pelo menos 50 (HIGH ou CRITICAL), o alerta correspondente em `climate.weather_alerts`. O PostgreSQL mantém a identidade estável da avaliação; replay do mesmo checkpoint converge pelas chaves do UPSERT. O conector JDBC usa lotes de até 100 registros ou 2 segundos, três tentativas e timeouts de conexão/leitura de 10 segundos; a validação de conexão usa 5 segundos.
+
+Somente avaliações HIGH ou CRITICAL seguem para `weather.alerts`. A chave Kafka é o `location_id` em UTF-8 e o valor é o JSON de alerta de 22 campos, incluindo `alert_id`. O sink usa `AT_LEAST_ONCE`, `acks=all` e tentativas limitadas. Kafka pode receber a mesma identidade mais de uma vez após uma recuperação; consumidores devem deduplicar por `alert_id`. Não há transação distribuída entre Kafka e PostgreSQL.
+
+IDs de localidade que não existem no catálogo são contados em `business_sinks.unknown_locations` e descartados apenas do ramo de negócio; os ramos diagnósticos anteriores continuam. Os contadores `jdbc_records_prepared` e `alert_records_prepared` representam preparação de registros, não confirmação de gravação.
+
+O Compose disponibiliza `POSTGRES_DB`, `APP_DB_USER` e `APP_DB_PASSWORD` apenas no JobManager, que carrega a configuração ao montar e submeter o grafo. Os conectores recebem as opções serializadas no job; o TaskManager não precisa das variáveis de ambiente do banco. O Flink usa a role da aplicação; `POSTGRES_USER` e `POSTGRES_PASSWORD` permanecem no serviço PostgreSQL. A senha não aparece na URL JDBC nem nos argumentos da CLI.
+
+O modo QA legado não acessa os sinks de negócio. Para uma execução QA que precise exercitá-los, use `--qa-audit --qa-business-sinks` e nome/grupo exclusivos, por exemplo `weather-flink-qa-a1b2` e `weather-flink-qa-a1b2-group`. A configuração dos destinos só é carregada depois da validação de identidade QA.
+
+A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentaram métricas temporais e avaliação de risco; a Etapa 8 criou o schema PostgreSQL e conectou os sinks nativos do job. O consumer de alertas continua reservado à etapa 9.

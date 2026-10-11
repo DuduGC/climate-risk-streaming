@@ -59,6 +59,9 @@ services:
         python.client.executable: /opt/python3.11/bin/python3.11
         python.executable: /opt/python3.11/bin/python3.11
         taskmanager.numberOfTaskSlots: 1
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no arquivo .env}
+      APP_DB_USER: ${APP_DB_USER:?Defina APP_DB_USER no arquivo .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Defina APP_DB_PASSWORD no arquivo .env}
     ports:
       - 127.0.0.1:8081:8081
     volumes:
@@ -70,6 +73,9 @@ services:
       timeout: 5s
       retries: 12
       start_period: 45s
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   flink-taskmanager:
     image: climate-logistics-flink:local

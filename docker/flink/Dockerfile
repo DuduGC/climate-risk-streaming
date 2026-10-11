@@ -26,6 +26,12 @@ RUN curl --fail --location --retry 5 --retry-delay 2 --connect-timeout 10 --max-
     && curl --fail --location --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 180 \
         https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.3.0-1.20/flink-sql-connector-kafka-3.3.0-1.20.jar \
         --output /tmp/flink-sql-connector-kafka-3.3.0-1.20.jar \
+    && curl --fail --location --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 180 \
+        https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-jdbc/3.3.0-1.20/flink-connector-jdbc-3.3.0-1.20.jar \
+        --output /tmp/flink-connector-jdbc-3.3.0-1.20.jar \
+    && curl --fail --location --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 180 \
+        https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar \
+        --output /tmp/postgresql-42.7.14.jar \
     && cd /tmp \
     && sha256sum --check checksums.sha256 \
     && tar -xJf /tmp/Python-3.11.14.tar.xz -C /tmp \
@@ -47,6 +53,27 @@ RUN /opt/python3.11/bin/python3.11 -m pip install \
         -r /tmp/requirements-flink.txt \
     && rm /tmp/requirements-flink.txt
 
+FROM python-builder AS java-builder
+
+USER root
+
+RUN if ! command -v javac >/dev/null 2>&1; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends openjdk-17-jdk-headless \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+COPY docker/flink/java/org/climatelogistics/AlertRecordSerializationSchema.java /tmp/java/org/climatelogistics/AlertRecordSerializationSchema.java
+COPY docker/flink/java/org/climatelogistics/BusinessJdbcStatementBuilder.java /tmp/java/org/climatelogistics/BusinessJdbcStatementBuilder.java
+
+RUN mkdir -p /tmp/classes \
+    && javac --release 17 \
+        -cp '/opt/flink/lib/*:/tmp/flink-sql-connector-kafka-3.3.0-1.20.jar:/tmp/flink-connector-jdbc-3.3.0-1.20.jar:/tmp/postgresql-42.7.14.jar' \
+        -d /tmp/classes \
+        /tmp/java/org/climatelogistics/AlertRecordSerializationSchema.java \
+        /tmp/java/org/climatelogistics/BusinessJdbcStatementBuilder.java \
+    && jar --create --file /tmp/climate-business-sinks.jar -C /tmp/classes .
+
 FROM flink:1.20.3-scala_2.12-java17 AS runtime
 
 USER root
@@ -66,6 +93,9 @@ RUN apt-get update \
 
 COPY --from=python-builder /opt/python3.11 /opt/python3.11
 COPY --from=python-builder /tmp/flink-sql-connector-kafka-3.3.0-1.20.jar /opt/flink/lib/flink-sql-connector-kafka-3.3.0-1.20.jar
+COPY --from=python-builder /tmp/flink-connector-jdbc-3.3.0-1.20.jar /opt/flink/lib/flink-connector-jdbc-3.3.0-1.20.jar
+COPY --from=python-builder /tmp/postgresql-42.7.14.jar /opt/flink/lib/postgresql-42.7.14.jar
+COPY --from=java-builder /tmp/climate-business-sinks.jar /opt/flink/lib/climate-business-sinks.jar
 
 RUN printf '%s\n' /opt/python3.11/lib > /etc/ld.so.conf.d/python3.11.conf \
     && ldconfig \

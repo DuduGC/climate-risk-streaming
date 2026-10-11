@@ -16,12 +16,14 @@ from pyflink.datastream.connectors.kafka import KafkaOffsetsInitializer, KafkaSo
 from pyflink.datastream.functions import FlatMapFunction, KeyedProcessFunction, MapFunction
 from pyflink.datastream.state import MapStateDescriptor, StateTtlConfig
 
+from climate_logistics.business_config import BusinessSinkSettings
 from climate_logistics.data_quality import (
     DEFAULT_DEDUP_TTL_SECONDS,
     DataQualityError,
     event_identity,
     validate_event_time,
 )
+from climate_logistics.flink_business import attach_business_sinks
 from climate_logistics.flink_risk import attach_risk_assessment
 from climate_logistics.flink_temporal import (
     attach_temporal_metrics,
@@ -245,7 +247,11 @@ def _row_type():
     return Types.ROW_NAMED(list(WEATHER_FIELDS), field_types)
 
 
-def build_pipeline(settings: JobSettings) -> StreamExecutionEnvironment:
+def build_pipeline(
+    settings: JobSettings,
+    *,
+    business_sinks: BusinessSinkSettings | None = None,
+) -> StreamExecutionEnvironment:
     """Constrói a fonte, validação temporal, deduplicação e saída diagnóstica."""
     env = StreamExecutionEnvironment.get_execution_environment()
     qa_execution = settings.qa_audit or settings.dedup_ttl_seconds != DEFAULT_DEDUP_TTL_SECONDS
@@ -312,14 +318,29 @@ def build_pipeline(settings: JobSettings) -> StreamExecutionEnvironment:
     )
     risk_stream = attach_risk_assessment(temporal_stream)
     risk_stream.print("weather-risk").name("weather-risk").uid("weather-risk")
+    if business_sinks is not None:
+        attach_business_sinks(risk_stream, business_sinks)
     return env
 
 
-def execute(job_name: str, settings: JobSettings | None = None) -> str:
+def execute(
+    job_name: str,
+    settings: JobSettings | None = None,
+    *,
+    business_sinks: BusinessSinkSettings | None = None,
+) -> str:
     """Submete o job e escreve o ID real para automação de QA/operação."""
     effective_settings = settings or JobSettings()
     _validate_execution_identity(job_name, effective_settings)
-    result = build_pipeline(effective_settings).execute(job_name)
+    effective_business_sinks = business_sinks
+    if effective_business_sinks is None and not job_name.startswith(QA_JOB_PREFIX):
+        effective_business_sinks = BusinessSinkSettings.from_environment(
+            bootstrap_servers=effective_settings.bootstrap_servers
+        )
+    result = build_pipeline(
+        effective_settings,
+        business_sinks=effective_business_sinks,
+    ).execute(job_name)
     job_id = str(result.get_job_id())
     print(f"JOB_ID={job_id}", flush=True)
     return job_id
@@ -341,6 +362,11 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
         "--qa-audit",
         action="store_true",
         help="emite auditoria mínima de aceitos, rejeitados e duplicados para QA",
+    )
+    parser.add_argument(
+        "--qa-business-sinks",
+        action="store_true",
+        help="habilita os destinos de negócio somente em QA auditada e exclusiva",
     )
     parser.add_argument(
         "--qa-checkpoint-interval-seconds",
@@ -403,12 +429,20 @@ def main(argv: list[str] | None = None) -> int:
             else args.qa_checkpoint_interval_seconds
         ),
     )
+    if args.qa_business_sinks and not settings.qa_audit:
+        raise ValueError("--qa-business-sinks exige --qa-audit")
     _validate_execution_identity(
         args.job_name,
         settings,
         checkpoint_interval_override=checkpoint_interval_override,
     )
-    execute(args.job_name, settings)
+    if args.qa_business_sinks:
+        business_sinks = BusinessSinkSettings.from_environment(
+            bootstrap_servers=settings.bootstrap_servers
+        )
+        execute(args.job_name, settings, business_sinks=business_sinks)
+    else:
+        execute(args.job_name, settings)
     return 0
 
 
