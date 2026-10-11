@@ -276,4 +276,20 @@ docker compose stop
 
 O script de bootstrap do PostgreSQL executa somente quando `postgres-data` está vazio. Alterar uma senha no `.env` não muda a senha de uma role que já existe; atualize-a no banco com uma sessão administrativa. O mesmo vale para as credenciais iniciais do banco.
 
-A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentam métricas temporais e avaliação de risco aos logs do Flink. Ainda não há persistência de negócio nem JDBC; os sinks no schema `climate` e o consumo de alertas ficam para etapas posteriores.
+### Schema de negócio do PostgreSQL
+
+O catálogo CSV versionado é derivado de `src/climate_logistics/locations.py`. Depois de alterar as localidades, gere o arquivo novamente e revise o diff:
+
+~~~powershell
+python scripts/render_location_seed.py
+~~~
+
+Em um volume PostgreSQL novo, `02-business-schema.sh` roda após o bootstrap inicial. Para aplicar ou reaplicar a migração em um volume existente, execute:
+
+~~~powershell
+docker compose exec -T postgres bash /docker-entrypoint-initdb.d/02-business-schema.sh
+~~~
+
+A migração cria `climate.locations`, `climate.weather_metrics` e `climate.weather_alerts` em uma transação, carrega o seed e concede à role da aplicação leitura da dimensão e leitura/escrita das tabelas de fatos, sem DDL, `DELETE` ou criação de tabelas temporárias. Ela valida o schema versionado e interrompe a transação quando encontra drift. A próxima tarefa conecta os sinks do job a essas tabelas e ao tópico `weather.alerts`.
+
+A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentaram métricas temporais e avaliação de risco aos logs do Flink. A etapa 8, tarefa 1 prepara o schema PostgreSQL; a tarefa seguinte conecta os sinks do job, e o consumer de alertas continua reservado à etapa 9.

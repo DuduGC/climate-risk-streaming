@@ -121,6 +121,9 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/01-bootstrap.sh:/docker-entrypoint-initdb.d/01-bootstrap.sh:ro
+      - ./docker/postgres/02-business-schema.sh:/docker-entrypoint-initdb.d/02-business-schema.sh:ro
+      - ./docker/postgres/migrations/001-business-sinks.sql:/opt/climate/postgres/migrations/001-business-sinks.sql:ro
+      - ./docker/postgres/locations.csv:/opt/climate/postgres/locations.csv:ro
     healthcheck:
       test:
         - CMD-SHELL
