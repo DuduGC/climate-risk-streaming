@@ -23,3 +23,15 @@ Spec proposta: docs/superpowers/specs/2026-10-11-business-sinks-design.md. Defin
 Self-review do principal: contratos/campos coerentes; separação entre atomicidade PostgreSQL e Kafka; nenhum consumer/serviço adicional; QA anterior sem writes porpadrão; tabelas não guardam raw; escopo e decisões de produto explicitamente propostos. Os parâmetros exatos de conectores/driver e tarefas serão definidos no plano escrito após aprovação da spec, antes de instalação ou código de produto.
 
 Próxima ação requerida: usuário revisar/aprovar a spec. Depois, principal escreve plano com interfaces/tarefas e execução por agentes LunaMax; aprovação do plano precede implementação conforme workflow arquitetural. Nenhum agente implementador foi despachado para código daetapa8.
+
+## Spec aprovada e plano escrito
+
+Usuário aprovou a spec em2026-10-11. Principal usou writing-plans e escreveu docs/superpowers/plans/2026-10-11-business-sinks.md. Três gates: contrato/migração PostgreSQL; sinks nativos/config/wiring; integração/replay/migração/faultQA. Implementação permanece nãoiniciada, método preservado agentesLunaMax.
+
+Inspeção read-only da API real confirmou JdbcSink.sink com reflexão createRowJdbcStatementBuilder e builder JDBC aninhado; serializersKafka padrão recebem registro inteiro, helper de coluna nativo somente segundo campo. Plano inclui pequeno serializerJavaRow2 exclusivamente para keylocation/valueJSON22, semtransportepróprio. JDKsomente builder, runtimeinalterado. JDBC3.3.0-1.20/pgJDBC42.7.14 fixados, hashesverificados na tarefa de build. Credenciais nuncaimpressas; nenhumproduto/dependência instalado.
+
+Self-review: oito critérios da spec têm owners/QA; cincoReviewFocus comtestes definidos; RowJDBC2parâmetros/RowKafka2campos/schemamétrica19colunasdados/alertpayload22 coerentes; divergência mesmaidentidade recusa transacionalmente paraevitaralertstale. Captura do grafo7 eQAslotúnico precedem deploy8. Faults usamconfig somente dejobQA próprio, sempararserviçoscompartilhados. Semtarefas paralelas cominterfacesdependentes; semconsumer9.
+
+Próximaação: revisar/aprovar plano; não pedir escolha de modelo/método novamente, já definidos pelo usuário.
+
+Timeoutdevalidação JDBC explicitado5s via builderJava público, alémconnect/socket10s e retries3; evita default60s por tentativa no orçamentoCP120s. NativeRowSerializer inspecionado, SDKwrappedcustomschema aceita instânciaJava; nenhuma instalação/função deproduto executada. Plano self-review concluído, semgaps/TODO.

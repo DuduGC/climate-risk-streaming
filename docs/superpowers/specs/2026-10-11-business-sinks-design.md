@@ -1,6 +1,6 @@
 # Etapa 8 — PostgreSQL e Kafka Alerts
 
-Status: proposta arquitetural para revisão do usuário, sem autorização de implementação deste desenho ainda. Escopo original: tabelas `locations`, `weather_metrics`, `weather_alerts`; Flink → PostgreSQL e Flink → `weather.alerts`. Base: `a26109e`, branch `foundation`.
+Status: desenho aprovado pelo usuário em2026-10-11. Plano de implementação escrito, aguardando revisão do usuário antes de execução. Escopo original: tabelas `locations`, `weather_metrics`, `weather_alerts`; Flink → PostgreSQL e Flink → `weather.alerts`. Base: `a26109e`, branch `foundation`.
 
 ## Objetivo e responsabilidades
 
@@ -80,3 +80,5 @@ Em2026-10-11, checkout limpo e serviços saudáveis após restart; REST inicialm
 - [PostgreSQL17 CTEs](https://www.postgresql.org/docs/17/queries-with.html): comunicação entre operações de escrita via RETURNING.
 
 Próximo passo após aprovação desta spec: plano escrito com tarefas implementáveis, interfaces e ordem de QA; execução por agentes LunaMax após aprovação do plano. Etapa9 não iniciada.
+
+Detalhamento técnico no plano: serializerJava mínimo preserva key/value do KafkaSink nativo; buildJava17 restrito ao builder. UPSERTs idênticos são aceitos; alteração de valores para a mesma identidade é recusada transacionalmente para evitar alerta stale, sem adicionar protocolo de revogação ou backfill. Esses detalhes concretizam o contrato determinístico aprovado.
