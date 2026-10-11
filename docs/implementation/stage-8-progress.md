@@ -1,6 +1,6 @@
 # Etapa 8 — preparação e decisões
 
-Data local:2026-10-11. Base:a26109e, checkout dedicado foundation. Usuário solicitou iniciar a etapa8 e reafirmou que o principal orquestra/revisa e agentes GPT-6 Luna Max implementam. A implementação da etapa8 ainda não começou.
+Data local:2026-10-11. Base:a26109e, checkout dedicado foundation. Usuário solicitou iniciar a etapa8 e reafirmou que o principal orquestra/revisa e agentes GPT-6 Luna Max implementam. Estado atual: tarefas 1 e 2 implementadas e aprovadas; tarefa 3 em execução. Os registros abaixo preservam o histórico de preparação.
 
 ## Exploração concluída
 
@@ -39,3 +39,8 @@ Timeoutdevalidação JDBC explicitado5s via builderJava público, alémconnect/s
 ## Execução autorizada
 
 Usuário aprovou o plano em2026-10-11. Task1 delegada aoagente stage8_records_impl GPT-6 Luna Max, TDDantesprodução. Ledgerdeexecução específico:stage-8-sdd-progress.md. Legacy7QAe0fc5a701089bc01b09f8de036b5f6b5/CP2 capturado antesnovo grafo; backupimagem/metadata/sourcehashes preservados. Op7temporária f50cfe22e4aaf194d1eea1cb55c0d84b retomada. Baseline482/SDK40/Ruffverificados pelo principal; Task2/3 não iniciadas.
+
+
+## Estado atual — tarefas 1 e 2 aprovadas
+
+Task1 commit a88fb65: contrato puro, SQL idempotente e schema PostgreSQL; testes reais de migração/replay/roles/cold-init aprovados. Task2 commit982f485: sinks JDBC/Kafka nativos, configuração e wiring; SDK83, suíte geral595/Ruff/build aprovados, nós saudáveis. Revisão independente de cada tarefa sem P1/P2 pendentes. Task3 delegada a stage8_delivery_impl GPT-6 Luna Max: provas de entrega real, replay, migração7→8 e falhas. Principal coordena o slot único e QA. Operação7 preservada em CP164; operação8 será restaurada no aceite final. Etapa8 ainda não concluída; etapa9 não iniciada.

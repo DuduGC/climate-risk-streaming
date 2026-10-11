@@ -304,4 +304,34 @@ O Compose disponibiliza `POSTGRES_DB`, `APP_DB_USER` e `APP_DB_PASSWORD` apenas 
 
 O modo QA legado não acessa os sinks de negócio. Para uma execução QA que precise exercitá-los, use `--qa-audit --qa-business-sinks` e nome/grupo exclusivos, por exemplo `weather-flink-qa-a1b2` e `weather-flink-qa-a1b2-group`. A configuração dos destinos só é carregada depois da validação de identidade QA.
 
+#### QA real de entrega e recuperação
+
+Os testes de sink usam os containers locais já iniciados e o runtime Python 3.11.14/PyFlink 1.20.3. O único slot Flink precisa estar livre; a fixture interrompe o Producer em `try/finally` e o reativa ao terminar. Cada teste usa um job/grupo QA próprio e espera o JobID próprio atingir um estado terminal. As leituras do PostgreSQL usam a role da aplicação; os testes de fixture exigem que suas identidades exatas estejam ausentes antes da entrada. A migração Stage 7 também salva um snapshot das facts antes/depois e limita a limpeza administrativa às identidades novas do job QA. O código não passa senhas na CLI nem as inclui nos registros de QA.
+
+O opt-in básico executa a entrega dos quatro níveis, compara as 24 avaliações e os 12 alertas persistidos, lê `weather.alerts` a partir de offsets capturados e restaura um checkpoint QA próprio. O replay envia as seis identidades originais novamente, exige auditoria `duplicate` e confirma que as linhas e chaves do grupo Kafka convergem no checkpoint seguinte. Um segundo cenário lê somente `.venv/stage8-legacy-checkpoint.json`, restaura o checkpoint real da Etapa 7 e confirma que as janelas abertas chegam aos sinks da Etapa 8. Esse cenário registra snapshots das tabelas de fatos antes/depois em `.venv/stage8-legacy-business-diff.json`; a limpeza administrativa remove somente identidades novas do job QA e confirma que rows preexistentes permaneceram iguais. Nenhum teste apaga tópicos, volumes ou checkpoints. As fixtures usam localidades existentes, timestamps históricos exclusivos alinhados a cinco minutos e ingestão coerente com o evento. O sentinela fecha as janelas alvo; os IDs desconhecidos continuam nos diagnósticos e no contador, sem fatos de negócio.
+
+No PowerShell, habilite apenas os cenários de entrega e migração do checkpoint legado:
+
+~~~powershell
+$env:FLINK_BUSINESS_TEST = "1"
+.\.venv\flink-control\Scripts\python.exe -m pytest tests/integration/test_flink_business.py -q
+Remove-Item Env:FLINK_BUSINESS_TEST
+~~~
+
+Para os dois cenários adicionais que injetam falha JDBC ou Kafka em um entrypoint QA temporário, defina também `FLINK_BUSINESS_FAULT_TEST=1` e execute o módulo separado:
+
+Cada caso só é considerado falha do destino quando a exceção e os logs identificam o writer e endpoint configurados: JDBC reporta `unable to open JDBC writer` com conexão recusada por `postgres:1`, e Kafka reporta falha de `weather.alerts` via `kafka:1`. Falha da fonte `kafka:9092` e OOM do TaskManager não satisfazem essa verificação.
+
+~~~powershell
+$env:FLINK_BUSINESS_TEST = "1"
+$env:FLINK_BUSINESS_FAULT_TEST = "1"
+.\.venv\flink-control\Scripts\python.exe -m pytest tests/integration/test_flink_business_faults.py -q
+Remove-Item Env:FLINK_BUSINESS_FAULT_TEST
+Remove-Item Env:FLINK_BUSINESS_TEST
+~~~
+
+Eles gravam um seed LOW em RJ01 em T−60 minutos antes do checkpoint C, depois publicam o HIGH em T e um sentinela LOW em T+100 na mesma key. A fixture deixa seis janelas LOW e seis HIGH para convergirem em 12 métricas e seis alertas. Os cenários restauram C, esperam a falha do destino e uma recuperação com configuração válida dentro de 240 segundos. Execute-os em sequência, com o Producer e o slot único disponíveis. A escrita PostgreSQL converge pelas chaves UPSERT; Kafka permanece `AT_LEAST_ONCE`, então repetições são aceitas somente quando conservam a mesma identidade, `alert_id`, key e payload.
+
+Validação real final da Tarefa 3: delivery/replay entregou 24 métricas e 12 alertas; a migração do checkpoint Stage 7 entregou 12 métricas/seis alertas alvo e limpou somente o delta do backlog; os faults JDBC e Kafka recuperaram de C2 para C3 e convergiram em 12 métricas/seis alertas, com mensagens repetidas equivalentes. Os quatro cenários passaram no gate do Root.
+
 A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentaram métricas temporais e avaliação de risco; a Etapa 8 criou o schema PostgreSQL e conectou os sinks nativos do job. O consumer de alertas continua reservado à etapa 9.

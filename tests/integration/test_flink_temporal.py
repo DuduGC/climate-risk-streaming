@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 import uuid
@@ -36,6 +37,8 @@ _SLIDE_MS = 300_000
 _WINDOW_MS = 1_800_000
 _OUT_OF_ORDER_MS = 120_000
 _ACTIVE_JOB_STATES = {"CREATED", "INITIALIZING", "RESTARTING", "RUNNING", "CANCELLING"}
+_TERMINAL_JOB_STATES = {"CANCELED", "FAILED", "FINISHED"}
+_QA_ENTRYPOINT_PATTERN = re.compile(r"/tmp/weather-flink-qa-[A-Za-z0-9][A-Za-z0-9_.-]*\.py\Z")
 
 
 def _epoch_millis(value: datetime) -> int:
@@ -323,7 +326,27 @@ def _submit_unbounded_qa_job(
     submission: dict[str, str | None],
     checkpoint_interval_seconds: int | None = None,
     restore_metadata: str | None = None,
+    business_sinks: bool = False,
+    python_entrypoint: str | None = None,
 ) -> str:
+    if business_sinks or python_entrypoint is not None:
+        suffix = job_name.removeprefix("weather-flink-qa-")
+        if (
+            not job_name.startswith("weather-flink-qa-")
+            or re.fullmatch(r"[A-Za-z0-9]+", suffix) is None
+            or group_id not in {job_name, f"{job_name}-group"}
+        ):
+            raise ValueError(
+                "business QA requires job-name weather-flink-qa-<id> and a matching group-id"
+            )
+    if python_entrypoint is not None:
+        if not business_sinks:
+            raise ValueError("alternate QA entrypoint requires business sinks")
+        if _QA_ENTRYPOINT_PATTERN.fullmatch(python_entrypoint) is None:
+            raise ValueError(
+                "alternate QA entrypoint must be a .py file under /tmp/weather-flink-qa-"
+            )
+
     existing_job_ids = set()
     if restore_metadata is not None:
         existing_job_ids = {
@@ -348,7 +371,7 @@ def _submit_unbounded_qa_job(
     command.extend(
         [
             "-py",
-            "/opt/climate/src/climate_logistics/flink_job.py",
+            python_entrypoint or "/opt/climate/src/climate_logistics/flink_job.py",
             "--job-name",
             job_name,
             "--group-id",
@@ -356,6 +379,8 @@ def _submit_unbounded_qa_job(
             "--qa-audit",
         ]
     )
+    if business_sinks:
+        command.append("--qa-business-sinks")
     if checkpoint_interval_seconds is not None:
         command.extend(
             ["--qa-checkpoint-interval-seconds", str(checkpoint_interval_seconds)]
@@ -541,7 +566,32 @@ def _cleanup_unbounded_qa_job(
     known_job_id = job_id or submission.get("job_id")
     own_job_id = _wait_for_own_job_id(job_name, known_job_id)
     if own_job_id:
-        _cancel_own_active_job(own_job_id)
+        job = _rest_json(f"/jobs/{own_job_id}")
+        if job.get("name") != job_name:
+            raise AssertionError(f"refusing to clean up unexpected job {own_job_id}")
+        if job.get("state") in _ACTIVE_JOB_STATES:
+            _cancel_own_active_job(own_job_id)
+        _wait_for_qa_job_terminal(own_job_id, job_name)
+
+
+def _wait_for_qa_job_terminal(
+    job_id: str,
+    job_name: str,
+    deadline_seconds: float = 30,
+) -> str:
+    deadline = time.monotonic() + deadline_seconds
+    last_state: str | None = None
+    while time.monotonic() < deadline:
+        job = _rest_json(f"/jobs/{job_id}")
+        if job.get("name") != job_name:
+            raise AssertionError(f"refusing to wait for unexpected job {job_id}")
+        last_state = str(job.get("state"))
+        if last_state in _TERMINAL_JOB_STATES:
+            return last_state
+        time.sleep(0.2)
+    raise AssertionError(
+        f"QA Flink job {job_name} did not reach a terminal state: {last_state}"
+    )
 
 
 def _vertex_id(job_id: str, name_fragment: str) -> str:

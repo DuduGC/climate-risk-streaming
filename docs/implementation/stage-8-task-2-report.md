@@ -31,3 +31,7 @@ As chaves de negócio e alertas são idempotentes no PostgreSQL por UPSERT. O si
 - Build realizado: `docker compose build flink-jobmanager`. O Root deve recriar JobManager e TaskManager somente após revisar o backup/checkpoint 7 preservado, confirmar jars/classes e os UIDs em ambos os nós, e restaurar/submeter a partir do checkpoint escolhido.
 - Validação SDK realizada dentro do runtime 1.20.3 com os testes listados acima; a saída final está em `.venv/stage8-task2-sdk-accepted.log`. A suíte do checkout está em `.venv/stage8-task2-whole.log`.
 - Ainda pendem a revisão independente, QA operacional PostgreSQL/Kafka, recuperação/fault QA e aprovação do Root antes de qualquer commit local.
+
+## Gate concluído pelo principal
+
+Revisão independente registrada em stage-8-task-2-review.md: nenhum P1/P2 confirmado. Principal confirmou os dois nós saudáveis, imagem final e jars/classes/UID/configuração de aplicação, com credenciais administrativas ausentes no Flink. Task2 registrada no commit local982f485. As provas runtime dos destinos/replay/falhas permanecem Task3; não são declaradas aprovadas por este gate.
