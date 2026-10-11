@@ -11,6 +11,27 @@ from climate_logistics.weather_parser import WEATHER_FIELDS
 _FIELD_INDEX = {field: index for index, field in enumerate(WEATHER_FIELDS)}
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MILLISECONDS_PER_DAY = 86_400_000
+WINDOW_METRIC_FIELDS = frozenset(
+    {
+        "component",
+        "operation",
+        "schema_version",
+        "location_id",
+        "window_start_ms",
+        "window_end_ms",
+        "event_count",
+        "temperature_avg",
+        "precipitation_max",
+        "precipitation_rate_max_mm_per_hour",
+        "wind_speed_max",
+        "wind_gust_max",
+        "visibility_min",
+        "measurement_interval_min_seconds",
+        "measurement_interval_max_seconds",
+        "first_event_timestamp_ms",
+        "last_event_timestamp_ms",
+    }
+)
 
 
 @dataclass(frozen=True)

@@ -22,6 +22,7 @@ from climate_logistics.data_quality import (
     event_identity,
     validate_event_time,
 )
+from climate_logistics.flink_risk import attach_risk_assessment
 from climate_logistics.flink_temporal import (
     attach_temporal_metrics,
     configure_checkpointing,
@@ -309,6 +310,8 @@ def build_pipeline(settings: JobSettings) -> StreamExecutionEnvironment:
     temporal_stream.print("weather-metrics").name("weather-metrics").uid(
         "weather-metrics"
     )
+    risk_stream = attach_risk_assessment(temporal_stream)
+    risk_stream.print("weather-risk").name("weather-risk").uid("weather-risk")
     return env
 
 

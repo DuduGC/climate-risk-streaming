@@ -1,6 +1,6 @@
 # Climate Logistics Streaming Platform
 
-Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink fará o processamento e PostgreSQL armazenará resultados de negócio. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em weather.raw. A Etapa 4 adicionou o primeiro job Flink, e a Etapa 5 valida coerência temporal e deduplica eventos nesse fluxo; tabelas de negócio e consumidor de alertas continuam para etapas posteriores.
+Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink processa as observações, e PostgreSQL armazenará resultados de negócio. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em weather.raw. A Etapa 4 adicionou o primeiro job Flink; as Etapas 5 e 6 validam coerência temporal, deduplicam eventos e calculam métricas por janela; a Etapa 7 acrescenta uma avaliação determinística de risco climático. Persistência de negócio e consumidor de alertas continuam para etapas posteriores.
 
 ## Requisitos e recursos
 
@@ -160,6 +160,25 @@ As janelas são deslizantes de 30 minutos, avançam em intervalos de 5 minutos e
 
 O `allowed_lateness` é zero. Os 120 segundos de desordem controlam o avanço do watermark e não reabrem janelas fechadas. Um evento parcialmente atrasado ainda contribui para as janelas abertas; `temporal_stream.late_records` conta uma vez somente quando todas as janelas do evento já fecharam. O payload atrasado é descartado após a contagem, sem tópico novo. Os checkpoints preservam o estado das janelas e da deduplicação para recuperação a partir do snapshot escolhido.
 
+## Avaliação de risco por janela
+
+Depois da agregação temporal, um ramo sem estado calcula uma avaliação para cada JSON `window_aggregate`. O PrintSink `weather-metrics` continua emitindo o contrato v1 original de 17 campos. O novo PrintSink `weather-risk` emite 21 campos: preserva os 17 valores, muda `operation` para `risk_assessment` e acrescenta `risk_score`, `risk_level`, `risk_components` e `risk_rules_version`. A versão de regras atual é `mvp-1`.
+
+Cada fator recebe 0, 25, 50, 75 ou 100. Chuva e vento usam comparações inclusivas (`>=`); visibilidade usa limites estritos (`<`). A avaliação final escolhe o maior score entre os quatro fatores:
+
+| Fator e unidade | Score 25 | Score 50 | Score 75 | Score 100 |
+| --- | --- | --- | --- | --- |
+| Intensidade máxima de chuva (mm/h) | >= 2 | >= 20 | >= 30 | >= 60 |
+| Velocidade máxima do vento (km/h) | >= 20 | >= 40 | >= 60 | >= 100 |
+| Rajada máxima (km/h) | >= 30 | >= 50 | >= 80 | >= 120 |
+| Visibilidade mínima (m) | < 5000 | < 2000 | < 1000 | < 200 |
+
+As faixas de `risk_level` são LOW (0–24), MEDIUM (25–49), HIGH (50–74) e CRITICAL (75–100). Por exemplo, vento a 40 km/h resulta em 50/HIGH; visibilidade de 199 m resulta em 100/CRITICAL. Dois fatores com score 50 continuam em 50: esta versão não soma fatores nem amplifica combinações moderadas, e uma condição extrema não é diluída pelas demais.
+
+O score é ordinal e heurístico. A projeção de chuva em mm/h vem da precipitação e do intervalo informado em cada observação; não é chuva acumulada na janela nem probabilidade de prejuízo. Os extremos podem vir de observações diferentes, então a avaliação não afirma que os fatores ocorreram simultaneamente. Temperatura, código meteorológico e contagem de eventos não participam da regra.
+
+O contador `risk_engine.assessed_windows` registra avaliações calculadas e serializadas pelo operador. Ele é uma métrica de processamento: pode reiniciar ou contar novamente após recuperação. O ramo de risco não cria estado próprio e o PrintSink não é transacional; checkpoints preservam as janelas existentes, mas a recuperação pode repetir linhas de diagnóstico. A persistência e a publicação de alertas ficam para etapas posteriores.
+
 ## Checkpoints e recuperação
 
 O job operacional grava checkpoints a cada 60 segundos em `file:///opt/flink/checkpoints`, usando `EXACTLY_ONCE` para estado gerenciado e offsets do source. Cada job mantém até dois checkpoints concluídos; checkpoints externalizados ficam retidos quando o job é cancelado. O volume nomeado `flink-checkpoints` é compartilhado entre JobManager e TaskManager e persiste quando os containers são recriados.
@@ -217,11 +236,11 @@ Esses testes cancelam somente o próprio JobID. Antes de iniciar a integração,
 
 ~~~powershell
 $env:FLINK_INTEGRATION = "1"
-python -m pytest tests/integration/test_kafka_flink.py tests/integration/test_flink_temporal.py -q
+python -m pytest tests/integration/test_kafka_flink.py tests/integration/test_flink_temporal.py tests/integration/test_flink_risk.py -q
 Remove-Item Env:FLINK_INTEGRATION
 ~~~
 
-No Linux, use `FLINK_INTEGRATION=1 python -m pytest tests/integration/test_kafka_flink.py tests/integration/test_flink_temporal.py -q`. O cenário temporal unbounded exige que o Producer conhecido esteja pausado e que não haja outro job usando o único slot; os testes não cancelam nem alteram jobs alheios.
+No Linux, use `FLINK_INTEGRATION=1 python -m pytest tests/integration/test_kafka_flink.py tests/integration/test_flink_temporal.py tests/integration/test_flink_risk.py -q`. O cenário temporal unbounded e a restauração do checkpoint Stage 6 exigem que o Producer conhecido esteja pausado e que não haja outro job usando o único slot; os testes não cancelam nem alteram jobs alheios.
 
 ## Python e qualidade
 
@@ -257,4 +276,4 @@ docker compose stop
 
 O script de bootstrap do PostgreSQL executa somente quando `postgres-data` está vazio. Alterar uma senha no `.env` não muda a senha de uma role que já existe; atualize-a no banco com uma sessão administrativa. O mesmo vale para as credenciais iniciais do banco.
 
-A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão, e a Etapa 6 acrescenta as métricas temporais e os checkpoints locais no Flink. Ainda não há persistência de negócio nem JDBC; os sinks no schema `climate` e o consumo de alertas ficam para etapas posteriores.
+A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentam métricas temporais e avaliação de risco aos logs do Flink. Ainda não há persistência de negócio nem JDBC; os sinks no schema `climate` e o consumo de alertas ficam para etapas posteriores.
