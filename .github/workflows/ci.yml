@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11.14"
+
+      - name: Install project and development dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt -r requirements-dev.txt
+
+      - name: Run unit and local integration suite
+        run: python -m pytest -q
+
+      - name: Check Python quality
+        run: python -m ruff check src tests
+
+  python-kafka:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_DB_PASSWORD: ci-unused-app-password
+      APP_DB_USER: ci_app
+      CI_COMPOSE_IMAGE: climate-logistics-producer:ci-${{ github.run_id }}-${{ github.run_attempt }}
+      COMPOSE_PROJECT_NAME: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      POSTGRES_DB: ci_weather
+      POSTGRES_PASSWORD: ci-unused-postgres-password
+      POSTGRES_USER: ci_postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11.14"
+
+      - name: Install project and development dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt -r requirements-dev.txt
+
+      - name: Prepare isolated Compose image tag
+        run: |
+          cat > "$RUNNER_TEMP/compose-ci.yaml" <<EOF
+          services:
+            alert-consumer:
+              image: ${CI_COMPOSE_IMAGE}
+          EOF
+          printf 'COMPOSE_FILE=%s:%s\n' "$GITHUB_WORKSPACE/compose.yaml" "$RUNNER_TEMP/compose-ci.yaml" >> "$GITHUB_ENV"
+
+      - name: Build the shared Python image for the alert consumer
+        run: docker compose build alert-consumer
+
+      - name: Verify Python image runtime and non-root user
+        run: >-
+          docker compose run --rm --no-deps --entrypoint python alert-consumer -c
+          "import os, sys; from importlib.metadata import version;
+          assert sys.version_info[:3] == (3, 11, 14), sys.version;
+          assert os.getuid() == 10001, os.getuid();
+          assert version('confluent-kafka') == '2.12.2', version('confluent-kafka');
+          print('Python ' + sys.version.split()[0] + ' / confluent-kafka ' + version('confluent-kafka') + ' / UID ' + str(os.getuid()))"
+
+      - name: Start only the isolated Kafka broker
+        run: docker compose up -d --wait --wait-timeout 180 kafka
+
+      - name: Create the integration topic explicitly
+        run: >-
+          docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh
+          --bootstrap-server kafka:9092 --create --topic weather.alerts
+          --partitions 3 --replication-factor 1 --if-not-exists
+
+      - name: Run the existing alert consumer integration test
+        env:
+          ALERT_CONSUMER_INTEGRATION: "1"
+        run: python -m pytest tests/integration/test_alert_consumer_integration.py -q
+
+      - name: Clean up the isolated Compose project
+        if: always()
+        run: |
+          docker compose down --volumes --remove-orphans --timeout 20 || true
+          container_ids="$(docker ps -aq --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}")"
+          if [ -n "$container_ids" ]; then
+            docker rm --force $container_ids || true
+          fi
+
+  flink-sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build the existing Flink image
+        run: docker build -f docker/flink/Dockerfile -t climate-logistics-flink:local .
+
+      - name: Run PyFlink SDK tests in an isolated temporary container
+        run: |
+          docker run --rm --user 0:0 \
+            --mount "type=bind,source=${GITHUB_WORKSPACE},target=/workspace,readonly" \
+            --workdir /workspace \
+            --env PYTHONPATH=/workspace/src \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --entrypoint /bin/bash climate-logistics-flink:local \
+            -lc '
+          set -euo pipefail
+          python3.11 -c "import sys; from importlib.metadata import version; import pyflink; assert sys.version_info[:3] == (3, 11, 14), sys.version; assert version(\"apache-flink\") == \"1.20.3\", version(\"apache-flink\"); print(\"Python \" + sys.version.split()[0] + \" / PyFlink \" + version(\"apache-flink\"))"
+          python3.11 -m pip install --disable-pip-version-check --no-cache-dir -r requirements-dev.txt
+          python3.11 - << "PY"
+          import pytest
+
+          class FailOnSkippedTests:
+              skipped = set()
+
+              def pytest_runtest_logreport(self, report):
+                  if report.skipped:
+                      self.skipped.add(report.nodeid)
+
+              def pytest_collectreport(self, report):
+                  if report.skipped:
+                      self.skipped.add(report.nodeid)
+
+          plugin = FailOnSkippedTests()
+          exit_code = pytest.main(
+              [
+                  "-q",
+                  "-p",
+                  "no:cacheprovider",
+                  "tests/unit/test_flink_job.py",
+                  "tests/unit/test_flink_temporal_sdk.py",
+                  "tests/unit/test_flink_risk_sdk.py",
+                  "tests/unit/test_flink_business_sdk.py",
+              ],
+              plugins=[plugin],
+          )
+          if plugin.skipped:
+              print(f"Flink SDK CI does not accept skipped tests: {sorted(plugin.skipped)}")
+              raise SystemExit(pytest.ExitCode.TESTS_FAILED)
+          raise SystemExit(exit_code)
+          PY
+            '
