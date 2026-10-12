@@ -13,3 +13,7 @@ Nenhum código de produto, instalação, build, container ou agente implementado
 Usuário aprovou a especificação em 2026-10-12. Plano enxuto com duas tarefas em docs/superpowers/plans/2026-10-12-alert-consumer.md: contrato/cache/handler; loop/saúde/Compose/integração. API do cliente2.12.2 conferida read-only no container existente: commit síncrono retorna partições e atributo real rror. Nenhum cliente novo, build ou código de produto. Self-review de interfaces, escopo, cinco falhas de revisão e cobertura concluída. Método já preservado: agentes GPT-6 Luna Max implementam, principal orquestra/revisa/QA; execução após revisão do plano.
 
 Self-review adicional: grupo latest ainda sem commit poderia pular a primeira mensagem falhada após restart. Plano concretiza semântica aprovada: assignment confirma baseline de início intencional só nas partições sem commit antes de processar; commits existentes preservados. Integração filtra fixtures por IDs/offsets ACK porque Flink continua publicando alertas legítimos. Nenhuma nova persistência ou dependência.
+
+## Execução autorizada
+
+Usuário aprovou o plano em 2026-10-12. Execução subagent-driven com Task1 primeiro, brief e ledger próprios preparados. Root valida/revisa e preserva método GPT-6 Luna Max. Sem novas aprovações intermediárias; progresso até aceite da etapa9.

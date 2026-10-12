@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections import OrderedDict
 from collections.abc import Mapping
 
 from climate_logistics.risk_engine import RULES_VERSION, calculate_risk, inputs_from_metric
@@ -264,6 +265,110 @@ def make_alert(assessment: Mapping[str, object]) -> dict[str, object] | None:
         )
     )
     return alert
+
+
+def _validate_alert(alert: object) -> dict[str, object]:
+    if not isinstance(alert, Mapping):
+        raise BusinessRecordError("alert must be an object")
+    try:
+        fields = set(alert)
+    except (TypeError, ValueError) as exc:
+        raise BusinessRecordError("alert keys are invalid") from exc
+    if fields != ALERT_FIELDS:
+        raise BusinessRecordError("alert keys do not match the 22-field contract")
+
+    candidate = dict(alert)
+    if type(candidate["operation"]) is not str or candidate["operation"] != "weather_alert":
+        raise BusinessRecordError("alert operation must be 'weather_alert'")
+    alert_id_value = _require_utf8_text(candidate["alert_id"], "alert_id")
+    assessment = dict(candidate)
+    del assessment["alert_id"]
+    assessment["operation"] = "risk_assessment"
+    normalized_assessment = _validate_assessment(assessment)
+    expected = make_alert(normalized_assessment)
+    if expected is None:
+        raise BusinessRecordError("alert risk must be HIGH or CRITICAL")
+    if alert_id_value != expected["alert_id"]:
+        raise BusinessRecordError("alert_id does not match the assessment identity")
+    return expected
+
+
+def parse_alert(raw: str) -> dict[str, object]:
+    """Parse and validate one compact 22-field HIGH/CRITICAL alert JSON value."""
+    if not isinstance(raw, str):
+        raise BusinessRecordError("alert JSON must be text")
+    try:
+        encoded = raw.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise BusinessRecordError("alert JSON must be valid UTF-8") from exc
+    if len(encoded) > _MAX_JSON_BYTES:
+        raise BusinessRecordError("alert JSON exceeds 16 KiB")
+
+    try:
+        value = json.loads(
+            raw,
+            object_pairs_hook=_unique_object,
+            parse_constant=_json_constant,
+        )
+    except BusinessRecordError:
+        raise
+    except (
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        TypeError,
+        ValueError,
+        RecursionError,
+    ) as exc:
+        raise BusinessRecordError("alert JSON is invalid") from exc
+    return _validate_alert(value)
+
+
+def alert_fingerprint(alert: Mapping[str, object]) -> str:
+    """Return a stable SHA-256 fingerprint for one validated alert payload."""
+    normalized = _validate_alert(alert)
+    for field_name in _NUMBER_FIELDS:
+        normalized[field_name] = float(normalized[field_name])
+    try:
+        canonical = json.dumps(
+            normalized,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8", errors="strict")
+    except (TypeError, ValueError, UnicodeEncodeError) as exc:
+        raise BusinessRecordError("alert cannot be serialized as JSON") from exc
+    return hashlib.sha256(canonical).hexdigest()
+
+
+class AlertIdCache:
+    """Bounded in-memory FIFO cache of alert IDs and normalized fingerprints."""
+
+    def __init__(self, capacity: int = 10_000) -> None:
+        if type(capacity) is not int or capacity <= 0:
+            raise ValueError("capacity must be a positive integer")
+        self._capacity = capacity
+        self._fingerprints: OrderedDict[str, str] = OrderedDict()
+
+    def classify(self, alert: Mapping[str, object]) -> str:
+        """Classify an alert without changing cache insertion order or contents."""
+        normalized = _validate_alert(alert)
+        identity = normalized["alert_id"]
+        fingerprint = alert_fingerprint(normalized)
+        previous = self._fingerprints.get(identity)
+        if previous is None:
+            return "new"
+        return "duplicate" if previous == fingerprint else "divergent"
+
+    def remember(self, alert: Mapping[str, object]) -> None:
+        """Store a confirmed new alert, evicting the oldest insertion if full."""
+        normalized = _validate_alert(alert)
+        identity = normalized["alert_id"]
+        if identity in self._fingerprints:
+            return
+        self._fingerprints[identity] = alert_fingerprint(normalized)
+        if len(self._fingerprints) > self._capacity:
+            self._fingerprints.popitem(last=False)
 
 
 def jdbc_values(assessment: Mapping[str, object]) -> tuple[str, str | None]:
