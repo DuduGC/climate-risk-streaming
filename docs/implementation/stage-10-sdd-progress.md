@@ -17,3 +17,9 @@ Preflight operacional: antes de alterar workflow/produto, REST retornou jobs vaz
 Root suíte geral Python3.11.14:695passed31skipped9,44s/RuffPASS. Build Flink existente cachedPASS; warning de metadados Git do Docker não afeta execução da imagem. Provas .venv/stage10-quality.log, stage10-flink-build.log, stage10-flink-continuity.json e stage10-baseline.json.
 
 Task 1: complete — fresh Luna Max implementou workflow; revisão independente SolHigh sem P1/P2 após correção de rede SDK e guard de skips. Root geral695pass31skip/Ruff, Python/Flink buildsPASS, novo broker1pass33,76s/cleanuppróprioPASS, bloco SDK exato61passzero skips18,54s (warnings de dependências). Ruling: local QA broker usa Python3.12 somente como orquestrador Docker/Pytest; consumidor/clients nativos3.11.14 e CI runner3.11.14 fixados — não modifica produto nem sua versão. Ruling: corrigir captura UTF8 do script Root depois do decodificador WindowsCP1252 falhar; repetição SDK justificada pela perda da saída, fonte workflow intacta. Provas locaisstage10-sdk-ci.log/stage10-kafka-ci-proof.json. Task2 apóscommitgate.
+
+Task 2: em execução — fresh Luna Max; brief stage-10-task-2-brief.md, somente documentação. Task1 gate fechado por commit local.
+
+Task1 commit e6d7443. Ruling: não adicionar PyYAML apenas para parser extra de workflow — imagem não contém yaml; revisão estática independente mais comandos reais atendem gates sem dependência nova. Sintaxe e semântica GitHub serão definitivamente confirmadas por run remoto quando solicitado; não houve run remoto.
+
+Task 2: complete — fresh Luna Max, documentação frozen. Reviewer stage10_docs_review SolHigh aprovou zeroP1/P2; Root15 links locais/zeroquebrados e diffcheckPASS. Código produto/CI não alterados; testes anteriores permanecem pertinentes. Prova final6IDsiguais, Job60b77... RUNNING CP230→244 failed0, recursosQA propios removidos. Revisão ampla AstraHigh em andamento.

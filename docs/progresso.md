@@ -10,11 +10,17 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 - Etapa 4: concluída; critérios/revisão aprovados em 2026-10-09.
 - Etapa 5: concluída; revisão independente e critérios reais aprovados em 2026-10-09 (logs finais em UTC 2026-10-10).
 - Etapa 6: concluída em 2026-10-10; revisão final, seis cenários reais e operação/checkpoints aprovados.
-- Etapa 7: plano e desenho aprovados; preparação de checkpoint legado e implementação em andamento.
-- Etapas 8–10: pendentes.
+- Etapas 1–9: concluídas; aceites e evidências de cada etapa estão registrados abaixo.
+- Etapa 10: em verificação; Tarefa 1 aprovada localmente e Tarefa 2 documental preparada para revisão/aceite final do principal.
 - Implementadores: GPT-6 Luna, raciocínio Max.
-- Git inicializado na branch `foundation`.
+- Branch local `foundation`; sem remoto GitHub configurado.
 - Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
+
+## Etapa 10 — verificação em andamento
+
+O workflow CI foi registrado no commit local `e6d7443`. Gates locais aprovados pelo principal: suíte Python `695 passed, 31 skipped`, Ruff, builds das imagens Python e Flink, integração Kafka isolada `1 passed` em 33,76 s com cleanup do projeto, e os módulos SDK Flink `61 passed, zero skips` em 18,54 s. Esses resultados não representam execução no GitHub Actions; não há remoto configurado.
+
+A Tarefa 2 atualiza README, arquitetura e este status, sem alterar produto, testes ou CI. A etapa permanece em verificação até a revisão documental e os gates finais do principal.
 
 ## Revisão prévia do plano
 

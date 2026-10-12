@@ -1,20 +1,21 @@
 # Climate Logistics Streaming Platform
 
-Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink processa as observações, persiste avaliações de risco no PostgreSQL e publica alertas de risco alto no tópico `weather.alerts`; o consumer registra esses alertas válidos. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em `weather.raw`. A Etapa 4 adicionou o primeiro job Flink; as Etapas 5 e 6 validam coerência temporal, deduplicam eventos e calculam métricas por janela; a Etapa 7 acrescenta uma avaliação determinística de risco climático.
+MVP local de streaming climático: o Producer consulta dados modelados da Open-Meteo e publica eventos no Kafka; um job Flink valida e agrega esses eventos, calcula risco por janela, grava métricas no PostgreSQL e publica alertas HIGH/CRITICAL em `weather.alerts`; o consumer valida e registra alertas em logs JSON. A arquitetura e os contratos estão descritos em [docs/architecture.md](docs/architecture.md), com o código como fonte de verdade.
 
 ## Requisitos e recursos
 
-Use Docker Engine com suporte a containers Linux e Docker Compose v2, ou Docker Desktop configurado para containers Linux. Reserve ao menos 6 GiB de memória para o Docker e cerca de 4 vCPUs: os limites dos cinco containers somam cerca de 4,25 GiB (Kafka 1 GiB, JobManager 1 GiB, TaskManager 1,5 GiB, PostgreSQL 512 MiB e Producer 256 MiB), além do sistema e do próprio Docker.
+Use Docker Engine com suporte a containers Linux e Docker Compose v2, ou Docker Desktop configurado para containers Linux. Reserve ao menos 6 GiB de memória para o Docker e cerca de 4 vCPUs. Os limites dos seis containers somam 4,375 GiB, além do sistema e do próprio Docker.
 
 | Serviço | Imagem | Recurso máximo | Acesso e persistência |
 | --- | --- | --- | --- |
 | Kafka | `apache/kafka:3.9.1` | 1 GiB; heap 512 MiB | Rede Docker em `kafka:9092`; volume `kafka-data` |
-| Producer | python:3.11.14-slim-bookworm | 256 MiB; 0,5 vCPU | Rede Docker em kafka:9092; sem porta própria |
+| Producer | `climate-logistics-producer:local` | 256 MiB; 0,5 vCPU | Rede Docker em `kafka:9092`; sem porta própria |
 | Flink JobManager | `climate-logistics-flink:local` | 1 GiB; processo 768 MiB | Console REST em `http://127.0.0.1:8081`; volume `flink-checkpoints` |
 | Flink TaskManager | `climate-logistics-flink:local` | 1,5 GiB; processo 1280 MiB | 1 slot; paralelismo padrão 1; volume `flink-checkpoints` |
 | PostgreSQL | `postgres:17.11-bookworm` | 512 MiB | Rede Docker em `postgres:5432`; volume `postgres-data` |
+| Consumer de alertas | `climate-logistics-producer:local` | 128 MiB; 0,25 vCPU | Rede Docker em `kafka:9092`; logs JSON em stdout |
 
-Kafka e PostgreSQL não publicam portas no host. Kafka usa um único nó KRaft combinado (broker/controller), replicação 1 e protocolo PLAINTEXT dentro da rede local; não há alta disponibilidade, TLS, SASL ou ACLs. O console REST do Flink fica limitado ao loopback do host e não tem autenticação.
+Kafka e PostgreSQL não publicam portas no host. Kafka usa um único nó KRaft combinado (broker/controller), replicação 1 e protocolo PLAINTEXT dentro da rede local; não há alta disponibilidade, TLS, SASL ou ACLs. O console REST do Flink fica limitado ao loopback do host e não tem autenticação. Producer e consumer rodam como UID 10001; os processos Flink rodam como `flink`.
 
 No broker Kafka, a retenção está configurada para 24 horas e 1 GiB por partição, com segmentos de 256 MiB e verificação de retenção a cada 5 minutos. A remoção ocorre por segmentos fechados; por isso, 1 GiB não é um teto rígido e imediato para o armazenamento do broker.
 
@@ -33,7 +34,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Espere Kafka, os dois serviços Flink e PostgreSQL mostrarem `healthy` em `docker compose ps`. O Producer aparece como `running`; acompanhe suas entregas pelos logs. O healthcheck do Flink valida a API REST e o registro do TaskManager.
+Espere Kafka, os dois serviços Flink, PostgreSQL e o consumer mostrarem `healthy` em `docker compose ps`. O Producer aparece como `running`; acompanhe suas entregas pelos logs. Os healthchecks do Flink validam a API REST e o registro do TaskManager. Esses estados indicam prontidão dos serviços, não a existência de um job Flink em execução.
 
 ## Verificar os serviços
 
@@ -43,11 +44,19 @@ Confirme que o broker responde ao protocolo Kafka:
 docker compose exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092
 ```
 
-Consulte a visão geral REST do Flink e confira um TaskManager e um slot disponível. A mesma visão pode ser aberta em `http://127.0.0.1:8081`:
+Consulte a visão do cluster REST do Flink e confira o TaskManager registrado. A mesma visão pode ser aberta em `http://127.0.0.1:8081`:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8081/overview | ConvertTo-Json
 ```
+
+Confira separadamente os jobs e seus estados. Para operação, o job `weather-kafka-ingestion` precisa aparecer como `RUNNING`; `healthy` no JobManager e no TaskManager não garante que ele tenha sido submetido:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8081/jobs/overview | Select-Object -ExpandProperty jobs | Format-Table name,state,jid
+```
+
+O consumer também pode estar `healthy` enquanto `weather.alerts` não recebe mensagens. Seu healthcheck confirma processo, partições atribuídas e heartbeat recente; alertas novos dependem das condições alcançarem HIGH ou CRITICAL.
 
 Acesse PostgreSQL por TCP local dentro do container com a role da aplicação. `-h 127.0.0.1` testa a autenticação TCP por senha, e `-W` solicita a senha interativamente, sem colocá-la no comando:
 
@@ -62,7 +71,7 @@ SELECT current_user, current_database();
 SELECT has_schema_privilege(current_user, 'climate', 'USAGE') AS acesso_ao_schema;
 ```
 
-Saia com `\q`. O bootstrap concede `CONNECT` ao banco e `USAGE` no schema `climate`; tabelas e privilégios de escrita entram em uma etapa posterior.
+Saia com `\q`. O bootstrap concede `CONNECT` ao banco e `USAGE` no schema `climate`. A migração cria `climate.locations`, `climate.weather_metrics` e `climate.weather_alerts`; a role da aplicação pode consultar o catálogo e ler/inserir/atualizar as tabelas de fatos, sem privilégios de administração.
 
 ## Cliente Open-Meteo
 
@@ -185,45 +194,50 @@ O job operacional grava checkpoints a cada 60 segundos em `file:///opt/flink/che
 
 O timeout é 120 segundos, a pausa mínima entre checkpoints é 10 segundos, há no máximo um checkpoint concorrente e nenhuma falha consecutiva de checkpoint é tolerada. Falhas do job podem reiniciar até três vezes, com 10 segundos entre tentativas; depois desse limite, o job termina com falha visível. Checkpoints de jobs cancelados podem continuar ocupando o volume mesmo com retenção de dois checkpoints por job. A limpeza é manual: confirme que o checkpoint exato e o JobID correspondente não são mais necessários antes de remover qualquer dado. O job não apaga diretórios de outros JobIDs.
 
-Para restaurar um snapshot, use o caminho `_metadata` retornado pelo endpoint REST de checkpoints em `external_path` e preserve o mesmo nome/grupo e o grafo com seus UIDs. Por exemplo, para um job QA que usou intervalo de 10 segundos:
+Para identificar o caminho antes de uma reinicialização planejada, consulte `/jobs/<jid-atual>/checkpoints` e registre o `external_path` do último checkpoint concluído. Depois de uma reinicialização do JobManager, use o caminho persistido no volume `flink-checkpoints` ou na prova operacional salva; a API já não lista o job anterior se ele não está ativo. Confira que o arquivo `_metadata` existe no container do JobManager. Um caminho de outra execução ou checkpoint incompleto não serve:
 
 ~~~powershell
-docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink run -d -s file:///opt/flink/checkpoints/JOB_ID/chk-CHECKPOINT_ID/_metadata -py /opt/climate/src/climate_logistics/flink_job.py --job-name weather-flink-qa-a1b2 --group-id weather-flink-qa-a1b2-group --qa-audit --qa-checkpoint-interval-seconds 10
+$jobId = "<jid-atual>"
+Invoke-RestMethod "http://127.0.0.1:8081/jobs/$jobId/checkpoints" | ConvertTo-Json -Depth 8
+$metadata = "file:///opt/flink/checkpoints/<diretorio-do-job>/chk-<checkpoint-concluido>/_metadata"
+docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink run -d -s $metadata -py /opt/climate/src/climate_logistics/flink_job.py --job-name weather-kafka-ingestion --group-id weather-flink-ingestion
 ~~~
 
-Substitua o caminho pelo `external_path` real do snapshot escolhido. Um override de 5 a 60 segundos exige `--qa-audit` e um nome/grupo QA exclusivos e correspondentes; sem override, o intervalo operacional continua em 60 segundos. A restauração é explícita: reiniciar todo o cluster standalone não submete o job novamente, pois não há alta disponibilidade nem autossubmissão. O PrintSink não participa de transação: a recuperação de estado e offsets não impede repetição de linhas nos logs e não representa exactly-once ponta a ponta.
+Substitua o valor de exemplo pelo caminho persistido do checkpoint completo escolhido e preserve o nome/grupo e os UIDs do grafo. A restauração é explícita: reiniciar o cluster standalone não submete o job novamente, pois não há alta disponibilidade nem autossubmissão. Sem `-s`, um novo job começa pelo initializer do source e pode reler eventos retidos; o comando sem restauração abaixo serve apenas para uma primeira submissão intencional, quando não há execução ativa nem checkpoint a retomar. Não use opções que ignorem estado não restaurado. Os checkpoints protegem estado e offsets do source; o PrintSink não participa de transação e as entregas aos destinos de negócio têm garantias separadas.
 
-Construa a imagem compartilhada e inicie os serviços:
+Construa as duas imagens existentes (Producer e consumer compartilham a imagem Python) e inicie os seis serviços:
 
 ~~~powershell
-docker compose build flink-jobmanager
-docker compose up -d
+docker compose build producer flink-jobmanager
+docker compose up -d --wait --wait-timeout 180
 docker compose ps
 ~~~
 
-Espere os healthchecks do JobManager e do TaskManager. Confira a lista de jobs antes de submeter para não ocupar o único slot com uma segunda instância:
+Confira `/jobs/overview` antes de qualquer submissão. Se `weather-kafka-ingestion` já estiver `RUNNING`, acompanhe esse job e não envie outro para o único slot. Se não houver job ativo após um restart, escolha o checkpoint completo persistido e use o comando de restauração acima; a saúde do cluster, sozinha, não confirma a retomada.
 
 ~~~powershell
 Invoke-RestMethod http://127.0.0.1:8081/jobs/overview | ConvertTo-Json
 ~~~
 
-Submeta o job operacional em modo detached pelo CLI do Flink, como usuário `flink` no JobManager. O comando retorna o JobID; use esse ID para acompanhar ou cancelar a execução:
+Na primeira execução, quando não há job operacional ativo e não há checkpoint a restaurar, a submissão intencional usa o CLI do Flink como usuário `flink` no JobManager. O comando retorna o JobID, que pode então ser consultado em `/jobs/overview`:
 
 ~~~powershell
 docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink run -d -py /opt/climate/src/climate_logistics/flink_job.py --job-name weather-kafka-ingestion --group-id weather-flink-ingestion
 ~~~
 
-Consulte um job específico e seus logs:
+Para consultar detalhes, obtenha o `jid` atual em `/jobs/overview` e use-o na rota REST:
 
 ~~~powershell
-Invoke-RestMethod http://127.0.0.1:8081/jobs/JOB_ID | ConvertTo-Json
+$jobId = "<jid-que-voce-identificou>"
+Invoke-RestMethod "http://127.0.0.1:8081/jobs/$jobId" | ConvertTo-Json
 docker compose logs --tail 100 flink-taskmanager
 ~~~
 
 Para cancelar, passe somente o JobID que você identificou:
 
 ~~~powershell
-docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink cancel JOB_ID
+$jobId = "<jid-que-voce-identificou>"
+docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink cancel $jobId
 ~~~
 
 O source começa em `earliest`, usa o grupo `weather-flink-ingestion`, não faz auto-commit e roda com paralelismo 1. Com checkpoints habilitados, Flink restaura explicitamente o estado e os offsets gravados no snapshot escolhido; uma submissão sem `-s` inicia de acordo com o initializer do source e pode reler registros retidos no tópico. O ramo de negócio persiste avaliações validadas no PostgreSQL e publica alertas elegíveis em `weather.alerts`; os logs de diagnóstico continuam temporários.
@@ -244,14 +258,14 @@ No Linux, use `FLINK_INTEGRATION=1 python -m pytest tests/integration/test_kafka
 
 ## Python e qualidade
 
-A estrutura e os serviços Python futuros usam Python 3.11. Crie um ambiente virtual e instale as dependências fixadas:
+O código Python e a imagem compartilhada do Producer/consumer usam Python 3.11. Crie um ambiente virtual e instale as dependências fixadas:
 
 ~~~powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt -r requirements-dev.txt
-python -m ruff check .
-python -m pytest
+python -m pytest -q
+python -m ruff check src tests
 ~~~
 
 No Linux, crie/ative o ambiente com python3.11 -m venv .venv e source .venv/bin/activate. A suíte padrão é offline e o smoke live é pulado explicitamente. Os testes HTTP usam um servidor local no loopback.
@@ -266,7 +280,15 @@ Remove-Item Env:OPEN_METEO_LIVE
 
 No Linux, use OPEN_METEO_LIVE=1 python -m pytest tests/integration/test_open_meteo_live.py -q.
 
-## Persistência e próximos passos
+## CI e verificações opt-in
+
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em `push`, `pull_request` e acionamento manual. O job `quality` executa a suíte padrão e Ruff; testes que precisam da API pública, broker, cluster ou checkpoints seguem opt-in. `python-kafka` cria um projeto Compose isolado, inicia somente Kafka, cria `weather.alerts` explicitamente (o broker não cria tópicos automaticamente), executa a integração existente e limpa apenas esse projeto. `flink-sdk` constrói a imagem Flink existente, confirma as versões do runtime e exige que os quatro módulos do SDK terminem sem skips. As Actions são fixadas por SHA e o token tem apenas `contents: read`.
+
+Para reproduzir os checks locais de qualidade, use os comandos da seção anterior; para as imagens, use `docker compose build producer flink-jobmanager`. As integrações ficam nas seções próprias e exigem suas variáveis de opt-in. A integração de alertas precisa de Kafka isolado e do tópico criado antes do teste; cenários Flink de recuperação precisam de coordenação do único slot e do Producer conforme descrito nas seções de operação. Não rode todas as integrações pesadas contra o projeto operacional ativo.
+
+Em 2026-10-12, o workflow e seus gates foram validados no checkout local. Ainda não há execução do GitHub Actions: este repositório está sem remoto GitHub configurado.
+
+## Persistência e operação
 
 Os dados de Kafka e PostgreSQL ficam nos volumes nomeados `kafka-data` e `postgres-data`. Para parar os containers e preservar os dados:
 
@@ -360,4 +382,4 @@ Eles gravam um seed LOW em RJ01 em T−60 minutos antes do checkpoint C, depois 
 
 Validação real final da Tarefa 3: delivery/replay entregou 24 métricas e 12 alertas; a migração do checkpoint Stage 7 entregou 12 métricas/seis alertas alvo e limpou somente o delta do backlog; os faults JDBC e Kafka recuperaram de C2 para C3 e convergiram em 12 métricas/seis alertas, com mensagens repetidas equivalentes. Os quatro cenários passaram no gate do Root.
 
-A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentaram métricas temporais e avaliação de risco; a Etapa 8 criou o schema PostgreSQL e conectou os sinks nativos do job. A Etapa 9 adiciona o consumer que valida, deduplica em memória e registra alertas de risco alto.
+Para contratos, fluxo, identidade dos registros, garantias e limites atuais, consulte [docs/architecture.md](docs/architecture.md).

@@ -19,3 +19,7 @@ Root suíte geral Python3.11.14:695passed31skipped9,44s/RuffPASS. Build Flink ex
 ## Task 1 verificada
 
 Workflow implementado e revisado, sem P1/P2 aberto. Root verificou comandos equivalentes: geral695pass31skip/Ruff, builds, runtimePy3.11.14/KafkaClient2.12.2/UID10001, integração em Kafka novo1pass33,76s e limpeza exclusiva, SDK61passzero skips18,54s. Não houve execução GitHub. Falha de capturaUTF8 no script QA Windows corrigida e SDK refeito; nenhum código produto alterado. Rede SDK liberada somente no container temporário para instalar requisitos dev; sem broker/banco/cluster.
+
+## Task 2 revisada
+
+README, arquitetura e progresso preparados por Luna Max, review documental independente aprovado sem P1/P2. Principal conferiu15 links locais sem quebra e diffcheck. Prova operacional final preserva seiscontainers e job, checkpoint244/0falhas; recursosQA novos removidos. Aceite final aguarda parecer amplo e fechamento local.
