@@ -1,6 +1,6 @@
 # Climate Logistics Streaming Platform
 
-Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink processa as observações, persiste avaliações de risco no PostgreSQL e publica alertas de risco alto no tópico `weather.alerts`. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em `weather.raw`. A Etapa 4 adicionou o primeiro job Flink; as Etapas 5 e 6 validam coerência temporal, deduplicam eventos e calculam métricas por janela; a Etapa 7 acrescenta uma avaliação determinística de risco climático. O consumer de alertas continua reservado à etapa 9.
+Fundação local de uma plataforma de logística climática: o Producer coleta eventos da Open-Meteo e publica no Kafka; Flink processa as observações, persiste avaliações de risco no PostgreSQL e publica alertas de risco alto no tópico `weather.alerts`; o consumer registra esses alertas válidos. A Etapa 3 inclui o contrato de eventos, o cliente HTTP e a publicação em `weather.raw`. A Etapa 4 adicionou o primeiro job Flink; as Etapas 5 e 6 validam coerência temporal, deduplicam eventos e calculam métricas por janela; a Etapa 7 acrescenta uma avaliação determinística de risco climático.
 
 ## Requisitos e recursos
 
@@ -300,6 +300,32 @@ Somente avaliações HIGH ou CRITICAL seguem para `weather.alerts`. A chave Kafk
 
 IDs de localidade que não existem no catálogo são contados em `business_sinks.unknown_locations` e descartados apenas do ramo de negócio; os ramos diagnósticos anteriores continuam. Os contadores `jdbc_records_prepared` e `alert_records_prepared` representam preparação de registros, não confirmação de gravação.
 
+### Consumer de alertas
+
+O serviço `alert-consumer` usa a imagem Python do Producer, roda como UID 10001 e consome somente `weather.alerts`. Ele valida novamente o contrato de 22 campos, a chave `location_id` e o catálogo local. Os registros JSON de `alert_received` e `alert_duplicate` incluem o alerta validado; `alert_invalid` informa uma razão estável e nunca inclui o payload bruto. Cada log recebe timestamp UTC, tópico, partição e offset.
+
+O primeiro uso de cada partição captura e confirma o high watermark antes de começar a ler, de modo que o grupo novo começa em `latest`. Rebalanceamentos e reinícios preservam offsets válidos já confirmados. O consumer desativa auto-commit e confirma cada mensagem de forma síncrona somente depois de escrever e descarregar o log. Mensagens inválidas também são confirmadas depois do registro seguro do motivo.
+
+A deduplicação usa um cache FIFO de 10.000 IDs em memória. Ele suprime alertas equivalentes durante a vida do processo; a identidade e o hash vêm do contrato de negócio compartilhado. O cache não é persistente: reinícios, evicções ou falhas após o log e antes do commit podem repetir registros, conforme a entrega `AT_LEAST_ONCE` do Kafka. Uma falha ao escrever ou descarregar stdout encerra o processo sem confirmar a mensagem.
+
+O serviço usa somente `KAFKA_BOOTSTRAP_SERVERS` e `ALERT_CONSUMER_GROUP_ID`; os defaults são `kafka:9092` e `weather-alerts-consumer`. Não recebe configuração nem credenciais do PostgreSQL. A saúde permanece válida quando o tópico está ocioso, desde que haja assignment, metadata recente e heartbeat atualizado. Para criar a imagem e iniciar apenas esse serviço, com Kafka já disponível:
+
+~~~powershell
+docker compose build alert-consumer
+docker compose up -d --no-deps alert-consumer
+docker compose logs -f alert-consumer
+~~~
+
+O healthcheck lê `/tmp/alert-consumer-health.json` e não abre conexão Kafka. A integração real é opt-in e usa container e grupo QA exclusivos; requer imagem construída, broker local e tópico `weather.alerts`:
+
+~~~powershell
+$env:ALERT_CONSUMER_INTEGRATION = "1"
+python -m pytest tests/integration/test_alert_consumer_integration.py -q
+Remove-Item Env:ALERT_CONSUMER_INTEGRATION
+~~~
+
+O cenário publica um alerta HIGH, uma cópia equivalente, uma mensagem inválida e outro alerta após recriar o consumer com o mesmo grupo. Ele confere offsets, logs, healthcheck e retomada; os grupos QA exclusivos permanecem no broker com seus offsets confirmados.
+
 O Compose disponibiliza `POSTGRES_DB`, `APP_DB_USER` e `APP_DB_PASSWORD` apenas no JobManager, que carrega a configuração ao montar e submeter o grafo. Os conectores recebem as opções serializadas no job; o TaskManager não precisa das variáveis de ambiente do banco. O Flink usa a role da aplicação; `POSTGRES_USER` e `POSTGRES_PASSWORD` permanecem no serviço PostgreSQL. A senha não aparece na URL JDBC nem nos argumentos da CLI.
 
 O modo QA legado não acessa os sinks de negócio. Para uma execução QA que precise exercitá-los, use `--qa-audit --qa-business-sinks` e nome/grupo exclusivos, por exemplo `weather-flink-qa-a1b2` e `weather-flink-qa-a1b2-group`. A configuração dos destinos só é carregada depois da validação de identidade QA.
@@ -334,4 +360,4 @@ Eles gravam um seed LOW em RJ01 em T−60 minutos antes do checkpoint C, depois 
 
 Validação real final da Tarefa 3: delivery/replay entregou 24 métricas e 12 alertas; a migração do checkpoint Stage 7 entregou 12 métricas/seis alertas alvo e limpou somente o delta do backlog; os faults JDBC e Kafka recuperaram de C2 para C3 e convergiram em 12 métricas/seis alertas, com mensagens repetidas equivalentes. Os quatro cenários passaram no gate do Root.
 
-A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentaram métricas temporais e avaliação de risco; a Etapa 8 criou o schema PostgreSQL e conectou os sinks nativos do job. O consumer de alertas continua reservado à etapa 9.
+A Etapa 3 criou os tópicos `weather.raw` e `weather.alerts` com três partições; a criação automática do broker segue desabilitada. A Etapa 4 adicionou o diagnóstico de ingestão; as Etapas 6 e 7 acrescentaram métricas temporais e avaliação de risco; a Etapa 8 criou o schema PostgreSQL e conectou os sinks nativos do job. A Etapa 9 adiciona o consumer que valida, deduplica em memória e registra alertas de risco alto.

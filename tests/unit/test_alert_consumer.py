@@ -357,3 +357,521 @@ def test_commit_message_requires_matching_partition_offset_and_no_error():
         consumer.result = result
         with pytest.raises(module.AlertCommitError, match="alert commit failed"):
             module.commit_message(consumer, message)
+
+
+@pytest.mark.unit
+def test_consumer_settings_accept_only_plain_bootstrap_and_safe_group_id():
+    module = _consumer_module()
+
+    defaults = module.ConsumerSettings.from_env({})
+    configured = module.ConsumerSettings.from_env(
+        {
+            "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092,broker-2:9093",
+            "ALERT_CONSUMER_GROUP_ID": "weather-alerts-qa-a1b2",
+            "APP_DB_PASSWORD": "ignored-by-consumer",
+        }
+    )
+
+    assert defaults.bootstrap_servers == "kafka:9092"
+    assert defaults.group_id == "weather-alerts-consumer"
+    assert configured.bootstrap_servers == "kafka:9092,broker-2:9093"
+    assert configured.group_id == "weather-alerts-qa-a1b2"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bootstrap",
+    [
+        "",
+        " ",
+        "kafka:9092 ",
+        "http://kafka:9092",
+        "user:secret@kafka:9092",
+        "kafka:9092?password=secret",
+        "kafka:9092\nattacker:9093",
+        "kafka:9092,",
+        "kafka:70000",
+    ],
+)
+def test_consumer_settings_reject_invalid_bootstrap_without_echoing_values(bootstrap):
+    module = _consumer_module()
+
+    with pytest.raises(module.ConsumerConfigurationError) as raised:
+        module.ConsumerSettings.from_env({"KAFKA_BOOTSTRAP_SERVERS": bootstrap})
+
+    assert "secret" not in str(raised.value)
+    if bootstrap.strip():
+        assert bootstrap not in str(raised.value)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("group_id", ["", " ", "_bad", "bad/group", "bad group", "x" * 129])
+def test_consumer_settings_reject_invalid_group_ids_without_echoing_values(group_id):
+    module = _consumer_module()
+
+    with pytest.raises(module.ConsumerConfigurationError) as raised:
+        module.ConsumerSettings.from_env({"ALERT_CONSUMER_GROUP_ID": group_id})
+
+    if group_id.strip():
+        assert group_id not in str(raised.value)
+
+
+@pytest.mark.unit
+def test_consumer_loop_uses_manual_latest_config_and_keeps_idle_assignment_healthy(
+    tmp_path, monkeypatch
+):
+    module = _consumer_module()
+    stop = __import__("threading").Event()
+    health_writes: list[dict[str, object]] = []
+    original_write_health = module.write_health
+    consumer = _RuntimeConsumer(stop=stop)
+    received_config: dict[str, object] = {}
+    emitted: list[dict[str, object]] = []
+
+    def factory(config):
+        received_config.update(config)
+        return consumer
+
+    def capture_health(path, **fields):
+        health_writes.append(dict(fields))
+        original_write_health(path, **fields)
+        if fields["ready"]:
+            stop.set()
+
+    monkeypatch.setattr(module, "write_health", capture_health)
+    result = module.run_consumer(
+        module.ConsumerSettings.from_env({}),
+        stop=stop,
+        health_path=tmp_path / "health.json",
+        consumer_factory=factory,
+        emit=lambda record: emitted.append(dict(record)),
+    )
+
+    assert result == 0
+    assert received_config == {
+        "bootstrap.servers": "kafka:9092",
+        "group.id": "weather-alerts-consumer",
+        "enable.auto.commit": False,
+        "enable.auto.offset.store": False,
+        "auto.offset.reset": "latest",
+        "socket.timeout.ms": 10_000,
+        "session.timeout.ms": 10_000,
+        "heartbeat.interval.ms": 3_000,
+        "max.poll.interval.ms": 60_000,
+    }
+    assert consumer.subscribed_topics == ["weather.alerts"]
+    assert consumer.poll_timeouts == [1.0]
+    assert any(item["ready"] is True for item in health_writes)
+    assert health_writes[-1]["ready"] is False
+    assert consumer.closed is True
+    assert consumer.global_commit_calls == 0
+    assert [record["operation"] for record in emitted] == [
+        "consumer_started",
+        "consumer_assigned",
+        "consumer_stopped",
+    ]
+    assert all(
+        record["component"] == "alert_consumer"
+        and record["status"] == "success"
+        and record["timestamp"].endswith("Z")
+        for record in emitted
+    )
+
+
+@pytest.mark.unit
+def test_assignment_preserves_committed_offsets_and_commits_only_new_latest_baselines():
+    module = _consumer_module()
+    consumer = _RuntimeConsumer(
+        initial_commits={("weather.alerts", 0): 13},
+        assigned_partitions=(0, 1),
+        watermarks={1: (4, 30)},
+    )
+
+    module.initialize_assignment(
+        consumer,
+        [_RuntimeTopicPartition("weather.alerts", 0), _RuntimeTopicPartition("weather.alerts", 1)],
+    )
+
+    assert [(item.partition, item.offset) for item in consumer.assignments[-1]] == [
+        (0, 13),
+        (1, 30),
+    ]
+    assert len(consumer.offset_commit_calls) == 1
+    assert [(item.partition, item.offset) for item in consumer.offset_commit_calls[0]] == [(1, 30)]
+
+
+@pytest.mark.unit
+def test_empty_assignment_and_invalid_metadata_never_report_ready(tmp_path, monkeypatch):
+    module = _consumer_module()
+
+    empty_stop = __import__("threading").Event()
+    empty_consumer = _RuntimeConsumer(stop=empty_stop, assigned_partitions=())
+    empty_writes: list[dict[str, object]] = []
+    original_write_health = module.write_health
+
+    def stop_after_two_polls(consumer, timeout):
+        consumer.poll_timeouts.append(timeout)
+        if len(consumer.poll_timeouts) == 2:
+            empty_stop.set()
+        return None
+
+    empty_consumer.poll = lambda timeout: stop_after_two_polls(empty_consumer, timeout)
+
+    def capture_empty_health(path, **fields):
+        empty_writes.append(dict(fields))
+        original_write_health(path, **fields)
+
+    monkeypatch.setattr(module, "write_health", capture_empty_health)
+    assert (
+        module.run_consumer(
+            module.ConsumerSettings.from_env({}),
+            stop=empty_stop,
+            health_path=tmp_path / "empty.json",
+            consumer_factory=lambda config: empty_consumer,
+            emit=lambda record: None,
+        )
+        == 0
+    )
+    assert not any(item["ready"] for item in empty_writes)
+
+    bad_metadata = _RuntimeConsumer(metadata_error=RuntimeError("broker secret"))
+    bad_writes: list[dict[str, object]] = []
+
+    def capture_bad_health(path, **fields):
+        bad_writes.append(dict(fields))
+        original_write_health(path, **fields)
+
+    monkeypatch.setattr(module, "write_health", capture_bad_health)
+    assert (
+        module.run_consumer(
+            module.ConsumerSettings.from_env({}),
+            stop=__import__("threading").Event(),
+            health_path=tmp_path / "bad.json",
+            consumer_factory=lambda config: bad_metadata,
+            emit=lambda record: None,
+        )
+        == 1
+    )
+    assert not any(item["ready"] for item in bad_writes)
+    assert bad_metadata.closed is True
+
+
+@pytest.mark.unit
+def test_operational_message_error_is_not_sent_to_handler_or_committed(tmp_path, capsys):
+    module = _consumer_module()
+    consumer = _RuntimeConsumer(messages=[FakeMessage(error=RuntimeError("broker secret"))])
+    emitted: list[dict[str, object]] = []
+    result = module.run_consumer(
+        module.ConsumerSettings.from_env({}),
+        stop=__import__("threading").Event(),
+        health_path=tmp_path / "health.json",
+        consumer_factory=lambda config: consumer,
+        emit=lambda record: emitted.append(dict(record)),
+    )
+
+    assert result == 1
+    assert [record["operation"] for record in emitted] == [
+        "consumer_started",
+        "consumer_assigned",
+        "consumer_error",
+        "consumer_stopped",
+    ]
+    assert emitted[2]["status"] == "error"
+    assert all("broker secret" not in json.dumps(record) for record in emitted)
+    assert consumer.message_commit_calls == 0
+    assert consumer.global_commit_calls == 0
+    assert consumer.closed is True
+    assert "broker secret" not in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_loop_reuses_one_bounded_cache_across_messages(tmp_path):
+    module = _consumer_module()
+    stop = __import__("threading").Event()
+    alert = _alert()
+    reordered = dict(reversed(tuple(alert.items())))
+    reordered["precipitation_rate_max_mm_per_hour"] = 20
+    messages = [
+        FakeMessage(),
+        FakeMessage(value=json.dumps(reordered, separators=(",", ":")).encode("utf-8")),
+    ]
+    consumer = _RuntimeConsumer(messages=messages)
+    emitted: list[dict[str, object]] = []
+
+    def emit(record):
+        emitted.append(dict(record))
+        if record.get("operation") == "alert_duplicate":
+            stop.set()
+
+    result = module.run_consumer(
+        module.ConsumerSettings.from_env({}),
+        stop=stop,
+        health_path=tmp_path / "health.json",
+        consumer_factory=lambda config: consumer,
+        emit=emit,
+    )
+
+    assert result == 0
+    assert [
+        record["operation"]
+        for record in emitted
+        if record["operation"] in {"alert_received", "alert_duplicate"}
+    ] == [
+        "alert_received",
+        "alert_duplicate",
+    ]
+    assert consumer.message_commit_calls == 2
+    assert consumer.global_commit_calls == 0
+    assert consumer.closed is True
+
+
+@pytest.mark.unit
+def test_consumer_exception_closes_without_global_commit_or_secret_error_output(
+    tmp_path, capsys
+):
+    module = _consumer_module()
+    consumer = _RuntimeConsumer(initial_commits={("weather.alerts", 0): 7})
+
+    def fail_poll(timeout):
+        raise RuntimeError("broker secret")
+
+    consumer.poll = fail_poll
+    result = module.run_consumer(
+        module.ConsumerSettings.from_env({}),
+        stop=__import__("threading").Event(),
+        health_path=tmp_path / "health.json",
+        consumer_factory=lambda config: consumer,
+        emit=lambda record: None,
+    )
+
+    assert result == 1
+    assert consumer.closed is True
+    assert consumer.global_commit_calls == 0
+    assert "broker secret" not in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_signal_handler_requests_shutdown_without_exposing_signal_details(monkeypatch):
+    module = _consumer_module()
+    stop = __import__("threading").Event()
+    registered = {}
+    prior = {module.signal.SIGINT: object(), module.signal.SIGTERM: object()}
+
+    def fake_signal(signum, handler):
+        registered[signum] = handler
+        return prior[signum]
+
+    monkeypatch.setattr(module.signal, "signal", fake_signal)
+    previous = module._install_signal_handlers(stop)
+
+    assert previous == prior
+    registered[module.signal.SIGTERM](module.signal.SIGTERM, None)
+    assert stop.is_set()
+
+
+@pytest.mark.unit
+def test_assignment_callback_failure_logs_error_and_closes_without_processing(
+    tmp_path, monkeypatch
+):
+    module = _consumer_module()
+    consumer = _RuntimeConsumer(messages=[FakeMessage()])
+    emitted: list[dict[str, object]] = []
+
+    def fail_assignment(*args, **kwargs):
+        raise RuntimeError("sensitive assignment detail")
+
+    monkeypatch.setattr(module, "initialize_assignment", fail_assignment)
+    result = module.run_consumer(
+        module.ConsumerSettings.from_env({}),
+        stop=__import__("threading").Event(),
+        health_path=tmp_path / "health.json",
+        consumer_factory=lambda config: consumer,
+        emit=lambda record: emitted.append(dict(record)),
+    )
+
+    assert result == 1
+    assert [record["operation"] for record in emitted] == [
+        "consumer_started",
+        "consumer_error",
+        "consumer_stopped",
+    ]
+    assert all("sensitive assignment detail" not in json.dumps(record) for record in emitted)
+    assert consumer.message_commit_calls == 0
+    assert consumer.global_commit_calls == 0
+    assert consumer.closed is True
+
+
+@pytest.mark.unit
+def test_alert_log_failure_emits_generic_error_and_prevents_message_commit(tmp_path):
+    module = _consumer_module()
+    consumer = _RuntimeConsumer(messages=[FakeMessage()])
+    emitted: list[dict[str, object]] = []
+
+    def fail_alert_output(record):
+        if record.get("operation") == "alert_received":
+            raise OSError("sensitive stdout detail")
+        emitted.append(dict(record))
+
+    result = module.run_consumer(
+        module.ConsumerSettings.from_env({}),
+        stop=__import__("threading").Event(),
+        health_path=tmp_path / "health.json",
+        consumer_factory=lambda config: consumer,
+        emit=fail_alert_output,
+    )
+
+    assert result == 1
+    assert [record["operation"] for record in emitted] == [
+        "consumer_started",
+        "consumer_assigned",
+        "consumer_error",
+        "consumer_stopped",
+    ]
+    assert all("sensitive stdout detail" not in json.dumps(record) for record in emitted)
+    assert consumer.message_commit_calls == 0
+    assert consumer.global_commit_calls == 0
+    assert consumer.closed is True
+
+
+@pytest.mark.unit
+def test_stopped_log_failure_still_invalidates_health_and_closes_consumer(
+    tmp_path, monkeypatch
+):
+    module = _consumer_module()
+    stop = __import__("threading").Event()
+    consumer = _RuntimeConsumer(stop=stop)
+    original_write_health = module.write_health
+
+    def stop_after_ready(path, **fields):
+        original_write_health(path, **fields)
+        if fields["ready"]:
+            stop.set()
+
+    def fail_stopped_log(record):
+        if record.get("operation") == "consumer_stopped":
+            raise OSError("shutdown log failure")
+
+    monkeypatch.setattr(module, "write_health", stop_after_ready)
+    result = module.run_consumer(
+        module.ConsumerSettings.from_env({}),
+        stop=stop,
+        health_path=tmp_path / "health.json",
+        consumer_factory=lambda config: consumer,
+        emit=fail_stopped_log,
+    )
+
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert result == 1
+    assert health["ready"] is False
+    assert consumer.closed is True
+    assert consumer.global_commit_calls == 0
+
+
+@dataclass
+class _RuntimeTopicPartition:
+    topic: str
+    partition: int
+    offset: int = -1001
+    error: object | None = None
+
+
+class _RuntimeConsumer:
+    def __init__(
+        self,
+        *,
+        stop=None,
+        initial_commits=None,
+        assigned_partitions=(0,),
+        watermarks=None,
+        messages=(),
+        metadata_error=None,
+    ):
+        self.stop = stop
+        self.initial_commits = dict(initial_commits or {})
+        self.assigned_partitions = assigned_partitions
+        self.watermarks = dict(watermarks or {})
+        self.messages = list(messages)
+        self.metadata_error = metadata_error
+        self.subscribed_topic = None
+        self.on_assign = None
+        self.assignments = []
+        self.offset_commit_calls = []
+        self.message_commit_calls = 0
+        self.global_commit_calls = 0
+        self.poll_timeouts = []
+        self.closed = False
+        self._assignment = []
+        self._callback_called = False
+        self._empty_stop_after_first_poll = False
+
+    def subscribe(self, topics, *, on_assign):
+        self.subscribed_topics = list(topics)
+        self.on_assign = on_assign
+
+    def list_topics(self, topic, *, timeout):
+        assert timeout == 5
+        error = self.metadata_error
+        topic_metadata = type(
+            "TopicMetadata",
+            (),
+            {"error": error, "partitions": {} if error else {0: object()}},
+        )()
+        return type("Metadata", (), {"topics": {topic: topic_metadata}})()
+
+    def committed(self, partitions, *, timeout):
+        assert timeout == 5
+        return [
+            _RuntimeTopicPartition(
+                item.topic,
+                item.partition,
+                self.initial_commits.get((item.topic, item.partition), -1001),
+            )
+            for item in partitions
+        ]
+
+    def get_watermark_offsets(self, partition, *, timeout, cached):
+        assert timeout == 5
+        assert cached is False
+        return self.watermarks.get(partition.partition, (0, 10))
+
+    def assign(self, partitions):
+        self._assignment = list(partitions)
+        self.assignments.append(list(partitions))
+
+    def commit(self, *, message=None, offsets=None, asynchronous=False):
+        assert asynchronous is False
+        if message is not None:
+            self.message_commit_calls += 1
+            return [
+                _RuntimeTopicPartition(message.topic(), message.partition(), message.offset() + 1)
+            ]
+        if offsets is None:
+            self.global_commit_calls += 1
+            return None
+        self.offset_commit_calls.append(list(offsets))
+        for item in offsets:
+            self.initial_commits[(item.topic, item.partition)] = item.offset
+        return [
+            _RuntimeTopicPartition(item.topic, item.partition, item.offset) for item in offsets
+        ]
+
+    def poll(self, timeout):
+        self.poll_timeouts.append(timeout)
+        if not self._callback_called:
+            self._callback_called = True
+            self.on_assign(
+                self,
+                [
+                    _RuntimeTopicPartition("weather.alerts", partition)
+                    for partition in self.assigned_partitions
+                ],
+            )
+        if self.messages:
+            return self.messages.pop(0)
+        return None
+
+    def assignment(self):
+        return list(self._assignment)
+
+    def close(self):
+        self.closed = True

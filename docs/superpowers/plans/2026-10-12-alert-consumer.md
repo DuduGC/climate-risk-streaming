@@ -1,6 +1,6 @@
 # Etapa 9 — Alert Consumer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Consumir e registrar alertas válidos de `weather.alerts`, com offsets manuais, supressão limitada de duplicatas e saúde observável.
 
@@ -40,11 +40,11 @@
 - `handle_message(message:Any,*,cache:AlertIdCache,emit:Callable[[Mapping[str,object]],None],commit:Callable[[Any],None])->str`: validar key UTF-8/body/catalog; emitir `alert_received`, `alert_duplicate` ou `alert_invalid` com componente `alert_consumer` e contexto seguro; chamar commit SOMENTE após emit bem-sucedido; cache remember apenas para novo válido após commit. Divergência/invalididade confirmadas como tratadas, sem substituir entrada válida nem imprimir dados brutos.
 - `commit_message(consumer:Any,message:Any)->None`: `commit(message=message,asynchronous=False)`; resultado deve confirmar topic/partition/offset+1 e nenhuma `.error`, senão erro genérico. A API2.12.2 instalada foi conferida: TopicPartition tem atributo `error`; a docstring menciona `.err`, não copiar esse nome errado.
 
-- [ ] Escrever RED de alertas válidos HIGH/CRITICAL; recusar LOW/MEDIUM, keys extras/faltantes/duplicadas, operação/schema/regra/hash/key errados, UTF-8/16KiB inválidos. Reutilizar fixtures de risco existentes; hash esperado independente.
-- [ ] Escrever RED de cache/fingerprint: key-order/20vs20.0 duplicados, mudança real divergente, evicção com capacidade2, cache não cresce acima da capacidade.
-- [ ] Escrever RED de handler/commit: eventos observados devem ser `['emit','commit']`; erro emit/flush implica zero commits; erro commit ou `.error` retornado implica zero lembranças no cache; inválido registra razão constante e progride offset sem raw.
-- [ ] Rodar focused RED em Python3.11; implementar somente interfaces mínimas; focused GREEN/Ruff e regressões puras de business_records.
-- [ ] Revisão independente + Root confere resultados antes de commit local `feat: validate and handle alert consumer records`. Task2 só inicia após esse gate.
+- [x] Escrever RED de alertas válidos HIGH/CRITICAL; recusar LOW/MEDIUM, keys extras/faltantes/duplicadas, operação/schema/regra/hash/key errados, UTF-8/16KiB inválidos. Reutilizar fixtures de risco existentes; hash esperado independente.
+- [x] Escrever RED de cache/fingerprint: key-order/20vs20.0 duplicados, mudança real divergente, evicção com capacidade2, cache não cresce acima da capacidade.
+- [x] Escrever RED de handler/commit: eventos observados devem ser `['emit','commit']`; erro emit/flush implica zero commits; erro commit ou `.error` retornado implica zero lembranças no cache; inválido registra razão constante e progride offset sem raw.
+- [x] Rodar focused RED em Python3.11; implementar somente interfaces mínimas; focused GREEN/Ruff e regressões puras de business_records.
+- [x] Revisão independente + Root confere resultados antes de commit local `feat: validate and handle alert consumer records`. Task2 só inicia após esse gate.
 
 ## Task 2 — Loop, saúde, Compose e integração
 
@@ -58,21 +58,25 @@
 - CLI consumer instala SIGTERM/SIGINT, usa stop Event, marca stopping/invalida heartbeat no finally. Saúde fica ready somente com metadata válida e assignment não vazio depois de poll; idle poll renova heartbeat, metadata expirada/falha não produz falso ready.
 - Compose `alert-consumer`: mesma image/build de `producer`, command `python -m climate_logistics.alert_consumer`; env somente bootstrap/group; health `python -m climate_logistics.consumer_health`; defaults/recursos/restart/grace da spec. Dockerfile/requisitos existentes inalterados, sem novas portas/volumes.
 
-- [ ] RED de config/cliente false flags e defaults; loop idle saudável, assignment vazio/metadataerror unhealthy; mensagem com erro não entra handler; Signal/exception fecha cliente e não usa commit global. Assignment preserva commits existentes e confirma baseline latest somente para partições novas antes de receber; falha na primeira mensagem não avança esse baseline, permitindo retomada.
-- [ ] RED health arquivo faltante/corrompido/stale/PIDmorto/futuro e fluxo ready; GREEN com atomic replace e CLI local. Teste shutdown/process close e limites de espera pertinentes.
-- [ ] Implementar loop/health/Compose/README; focused GREEN/Ruff. Documentar cache não durável, latest no primeiro uso, invalids confirmados, IDs históricos deQA reconhecíveis por timestamps.
-- [ ] Root build somente imagem Python/newservice (`docker compose build alert-consumer`), sem recriar Producer ou nósFlink. Conferir cliente2.12.2/UID10001 e healthCLI sem cliente Kafka extra.
-- [ ] Uma integração real opt-in `ALERT_CONSUMER_INTEGRATION=1`: container/grupo `weather-alerts-qa-<hex>` próprios; capturar ID antes de esperar, aguardar assignment/ready ANTESpublish. Publicar fixture HIGH com hash independente, repetição equivalente e inválido; verificar received1/duplicate1/invalid1 das fixtures por ID/partition/offset capturados no ACK (ignorar logs de outros alertas legítimos), ausência de raw, commits>=offset+1 e saúde idle. Recriar consumer do mesmo grupo e publicar outro alerta: antigos offsets confirmados não reaparecem, confirmando retomada. Deadline90s por fase; cleanup do próprio container em finally. Observer broker somente leitura, sem apagar grupos/topics/dados alheios.
-- [ ] Root confirma suíte geral Python3.11/Ruff uma vez no código final e revisão independente; commit local `feat: run alert consumer with healthcheck and kafka integration` após gates. Corrigir apenas defeitos concretos porLunaMax; sem repetir QA cara etapa8.
+- [x] RED de config/cliente false flags e defaults; loop idle saudável, assignment vazio/metadataerror unhealthy; mensagem com erro não entra handler; Signal/exception fecha cliente e não usa commit global. Assignment preserva commits existentes e confirma baseline latest somente para partições novas antes de receber; falha na primeira mensagem não avança esse baseline, permitindo retomada.
+- [x] RED health arquivo faltante/corrompido/stale/PIDmorto/futuro e fluxo ready; GREEN com atomic replace e CLI local. Teste shutdown/process close e limites de espera pertinentes.
+- [x] Implementar loop/health/Compose/README; focused GREEN/Ruff. Documentar cache não durável, latest no primeiro uso, invalids confirmados, IDs históricos deQA reconhecíveis por timestamps.
+- [x] Root build somente imagem Python/newservice (`docker compose build alert-consumer`), sem recriar Producer ou nósFlink. Conferir cliente2.12.2/UID10001 e healthCLI sem cliente Kafka extra.
+- [x] Uma integração real opt-in `ALERT_CONSUMER_INTEGRATION=1`: container/grupo `weather-alerts-qa-<hex>` próprios; capturar ID antes de esperar, aguardar assignment/ready ANTESpublish. Publicar fixture HIGH com hash independente, repetição equivalente e inválido; verificar received1/duplicate1/invalid1 das fixtures por ID/partition/offset capturados no ACK (ignorar logs de outros alertas legítimos), ausência de raw, commits>=offset+1 e saúde idle. Recriar consumer do mesmo grupo e publicar outro alerta: antigos offsets confirmados não reaparecem, confirmando retomada. Deadline90s por fase; cleanup do próprio container em finally. Observer broker somente leitura, sem apagar grupos/topics/dados alheios.
+- [x] Root confirma suíte geral Python3.11/Ruff uma vez no código final e revisão independente; commit local `feat: run alert consumer with healthcheck and kafka integration` após gates. Corrigir apenas defeitos concretos porLunaMax; sem repetir QA cara etapa8.
 
 ## Aceite final do principal
 
-- [ ] Revisão final do diff completo; conferir nenhum P1/P2 aberto, requisitos e limites da spec cobertos. Reusar evidências aprovadas sem reruns redundantes.
-- [ ] Subir somente `alert-consumer` operacional com grupo padrão; healthy/idle sem exigir alertas meteorológicos novos; registrar prova dos logs/offsets porQA e limites. Confirmar serviços existentes/jobFlink preservados.
-- [ ] Scan de secrets seguro, `.env` ignore, diff/indexcheck; atualizar spec/plano/progresso/aceite; commits locais e checkout limpo. Sem push, etapa10 pendente.
+- [x] Revisão final do diff completo; conferir nenhum P1/P2 aberto, requisitos e limites da spec cobertos. Reusar evidências aprovadas sem reruns redundantes.
+- [x] Subir somente `alert-consumer` operacional com grupo padrão; healthy/idle sem exigir alertas meteorológicos novos; registrar prova dos logs/offsets porQA e limites. Confirmar serviços existentes/jobFlink preservados.
+- [x] Scan de secrets seguro, `.env` ignore, diff/indexcheck; atualizar spec/plano/progresso/aceite; commits locais e checkout limpo. Sem push, etapa10 pendente.
 
 ## Self-review e método
 
 Spec contrato/cache/logging/offsets coberta pela Task1; execução/saúde/Compose/integração pela Task2. As duas compartilham apenas `alert_consumer.py` com interfaces explícitas e execução sequencial; não há ciclo entre tarefas. Cinco Review Focus têm testes definidos. Cache e stdout não são duráveis, versão do cliente não muda e os serviços já aceitos não são reiniciados. Nenhum código de produto escrito nesta fase.
 
 Método já escolhido: subagent-driven com implementadores GPT-6 Luna Max, Root orquestrador/revisor/QA. Aguardar revisão deste plano antes de implementar; não perguntar novamente modelo ou método.
+
+## Resultado em 2026-10-12
+
+Duas tarefas concluídas. Integração renomeada para test_alert_consumer_integration.py para evitar colisão de import com o teste unitário. Implementação e correções por Luna Max; Root verificou Python 3.11, build, integração e operação; revisões independentes e aceite em docs/implementation/stage-9-acceptance.md. Checkout foundation reutilizado conforme decisão já autorizada; commits locais, sem push.

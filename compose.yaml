@@ -157,6 +157,29 @@ services:
       kafka:
         condition: service_healthy
 
+  alert-consumer:
+    image: climate-logistics-producer:local
+    build:
+      context: .
+      dockerfile: docker/producer/Dockerfile
+    command: ["python", "-m", "climate_logistics.alert_consumer"]
+    restart: on-failure:3
+    mem_limit: 128m
+    cpus: 0.25
+    stop_grace_period: 30s
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      ALERT_CONSUMER_GROUP_ID: ${ALERT_CONSUMER_GROUP_ID:-weather-alerts-consumer}
+    healthcheck:
+      test: ["CMD", "python", "-m", "climate_logistics.consumer_health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      kafka:
+        condition: service_healthy
+
 volumes:
   flink-checkpoints:
   kafka-data:
