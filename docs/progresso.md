@@ -1,87 +1,87 @@
 # Progresso do projeto
 
-As dez etapas do MVP foram concluídas entre 2026-10-07 e 2026-10-12. Este registro reúne o objetivo, a entrega, os principais desafios e as validações de cada etapa. As contagens de testes abaixo vêm das execuções documentadas no fechamento correspondente; testes opt-in pulados não são apresentados como aprovados.
+Concluímos as dez etapas do MVP entre 2026-10-07 e 2026-10-12. Este documento registra o que entregamos, os desafios de cada etapa e como validamos o trabalho. As contagens de testes correspondem às execuções registradas no fechamento de cada etapa. Testes opt-in pulados não entram como aprovados.
 
-## Etapa 1 — fundação da infraestrutura
+## Etapa 1: fundação da infraestrutura
 
-**Feito:** Compose com Kafka, PostgreSQL, Flink JobManager e TaskManager; bootstrap, healthchecks, volumes, limites de recursos, estrutura Python e documentação inicial.
+**Feito:** Montamos o Compose com Kafka, PostgreSQL, Flink JobManager e TaskManager. Também configuramos bootstrap, healthchecks, volumes e limites de recursos, e criamos a estrutura Python e a documentação inicial.
 
-**Desafios e correções:** o primeiro limite de memória não permitiu a prontidão do TaskManager; o processo foi ajustado para 1280 MiB e o container para 1536 MiB. A revisão do README também corrigiu o comando `psql` para testar autenticação TCP por senha e esclareceu a política de retenção do Kafka.
+**Desafios e correções:** O primeiro limite de memória impediu o TaskManager de ficar pronto. Ajustamos o processo para 1280 MiB e o container para 1536 MiB. Na revisão do README, corrigimos o comando `psql` para testar autenticação TCP por senha e explicamos a política de retenção do Kafka.
 
-**Validação:** os quatro serviços ficaram saudáveis, o broker respondeu, o Flink registrou um TaskManager e um slot, e verificações operacionais confirmaram autenticação PostgreSQL, privilégios mínimos e persistência após reinício. Ruff passou. Pytest ainda não tinha casos nessa etapa; isso foi registrado como ausência de suíte, não como aprovação de testes.
+**Validação:** Os quatro serviços ficaram saudáveis. O broker respondeu, e o Flink registrou um TaskManager e um slot. Também verificamos autenticação PostgreSQL, privilégios mínimos e persistência após reinício. Ruff passou. Pytest ainda não tinha casos nessa etapa. Registramos a ausência da suíte sem contar isso como aprovação de testes.
 
-## Etapa 2 — cliente Open-Meteo
+## Etapa 2: cliente Open-Meteo
 
-**Feito:** modelos imutáveis `Location` e `WeatherEvent`, catálogo de três localidades, normalização do bloco `current` e cliente HTTP com TLS verificado, limites de resposta, timeout e retries controlados.
+**Feito:** Criamos os modelos imutáveis `Location` e `WeatherEvent`, cadastramos três localidades e normalizamos o bloco `current`. Também fizemos um cliente HTTP com TLS verificado, limite de resposta, timeout e retries controlados.
 
-**Desafios e correções:** corrigida a conversão de timestamps com offsets que saíam do domínio UTC aceito. JSON excessivamente profundo ou com inteiros extremos passou a virar erro de domínio, sem retry indevido. O README ganhou instruções de `PYTHONPATH` para o pacote em `src`.
+**Desafios e correções:** Corrigimos a conversão de timestamps com offsets que ficavam fora do domínio UTC aceito. JSON muito profundo ou com inteiros extremos agora gera erro de domínio, sem retry indevido. No README, incluímos instruções de `PYTHONPATH` para usar o pacote em `src`.
 
-**Validação:** suíte Python: 291 aprovados e 1 cenário live pulado; Ruff passou. O smoke opt-in contra a API pública passou com 1 caso. Os dados continuam sendo previsões de modelo, e os timeouts HTTP não formam um prazo total absoluto.
+**Validação:** A suíte Python teve 291 aprovações e 1 cenário live pulado; Ruff passou. O smoke opt-in contra a API pública passou em 1 caso. Os dados da API são previsões de modelo. Os timeouts HTTP não definem um prazo total absoluto.
 
-## Etapa 3 — Producer e Kafka
+## Etapa 3: Producer e Kafka
 
-**Feito:** publicação dos eventos validados em `weather.raw`, criação e conferência dos tópicos, CLI contínua e `--once`, logs JSON e imagem Python não-root. O Producer não recebe credenciais PostgreSQL.
+**Feito:** Publicamos eventos validados em `weather.raw` e criamos e conferimos os tópicos. O Producer tem modos contínuo e `--once`, gera logs JSON e usa uma imagem Python não-root. Ele não recebe credenciais PostgreSQL.
 
-**Desafios e correções:** foram reforçadas a validação da topologia de tópicos existentes, a contagem de confirmações em lotes com falha parcial e a aplicação dos prazos de retry. Um erro transitório `NOT_LEADER_FOR_PARTITION` levou o observador de testes a atualizar metadata e repetir somente dentro do prazo configurado.
+**Desafios e correções:** Reforçamos a validação dos tópicos existentes, a contagem de confirmações em lotes com falha parcial e o respeito aos prazos de retry. Um erro transitório `NOT_LEADER_FOR_PARTITION` fez o observador de testes atualizar metadata e repetir a operação dentro do prazo configurado.
 
-**Validação:** 329 testes aprovados e 4 opt-in pulados; Ruff passou. Três integrações reais com Kafka/API passaram. O build, a entrega de três localidades, a identidade não-root e o encerramento por SIGTERM foram verificados. Idempotência de sessão não elimina repetição lógica entre ciclos ou reinícios.
+**Validação:** 329 testes aprovados e 4 opt-in pulados; Ruff passou. Passaram três integrações reais com Kafka/API. Verificamos o build, a entrega de três localidades, a identidade não-root e o encerramento por SIGTERM. A idempotência de sessão não elimina repetições lógicas entre ciclos ou reinícios.
 
-## Etapa 4 — Kafka para Flink
+## Etapa 4: Kafka para Flink
 
-**Feito:** runtime PyFlink comum aos dois nós, leitura de `weather.raw`, parser tipado, métricas de ingestão, diagnóstico JSON e modos bounded para QA e unbounded para operação.
+**Feito:** Configuramos o runtime PyFlink nos dois nós. O job lê `weather.raw`, usa um parser tipado, registra métricas de ingestão e gera diagnósticos JSON. Também criamos os modos bounded para QA e unbounded para operação.
 
-**Desafios e correções:** a primeira execução real falhou porque o runtime PyFlink usa `get_metrics_group()`, e não `get_metric_group()`. A chamada foi corrigida e ganhou regressão. Também foram rejeitadas strings JSON com surrogates inválidos antes da serialização para o formato de linha Flink.
+**Desafios e correções:** A primeira execução real falhou porque o runtime PyFlink oferece `get_metrics_group()`, mas o código chamava `get_metric_group()`. Corrigimos a chamada e incluímos uma regressão. Também passamos a rejeitar strings JSON com surrogates inválidos antes de serializá-las para o formato de linha Flink.
 
-**Validação:** 346 testes aprovados e 6 opt-in/SDK pulados; Ruff passou. O SDK PyFlink e uma integração Kafka→Flink bounded passaram. A execução operacional recebeu confirmação REST de estado `RUNNING` e produziu diagnóstico da fixture. Checkpoints e recuperação ainda não faziam parte desta etapa.
+**Validação:** 346 testes aprovados e 6 opt-in/SDK pulados; Ruff passou. O SDK PyFlink e uma integração bounded de Kafka para Flink passaram. A execução operacional recebeu confirmação REST do estado `RUNNING` e produziu o diagnóstico da fixture. Checkpoints e recuperação ainda não faziam parte desta etapa.
 
-## Etapa 5 — qualidade temporal e deduplicação
+## Etapa 5: qualidade temporal e deduplicação
 
-**Feito:** validação de coerência entre horário do evento, ingestão e relógio observado; identidade por localidade e instante UTC; deduplicação em `MapState` com TTL de 24 horas e métricas de decisões.
+**Feito:** Validamos a coerência entre o horário do evento, a ingestão e o relógio observado. Definimos a identidade do evento por localidade e instante UTC, e implementamos deduplicação em `MapState` com TTL de 24 horas e métricas das decisões.
 
-**Desafios e correções:** o QA exigia a duração do bundle em milissegundos numéricos. Uma prova real mostrou que o cache de estado Python do SDK podia manter visível um marcador expirado; o pipeline passou a configurar `python.state.cache-size=0`. A janela do teste TTL foi ampliada para dar margem ao overhead do Docker e continuar distinguindo expiração de renovação.
+**Desafios e correções:** O QA exigia a duração do bundle em milissegundos numéricos. Uma prova real mostrou que o cache de estado Python do SDK podia manter visível um marcador expirado. Por isso, configuramos `python.state.cache-size=0` no pipeline. Também ampliamos a janela do teste TTL para acomodar o overhead do Docker e continuar distinguindo expiração de renovação.
 
-**Validação:** 361 testes aprovados e 15 cenários opt-in/SDK pulados; SDK Flink: 8 aprovados; Ruff passou. Três integrações reais passaram. A prova TTL confirmou aceitação, rejeição de duplicata e nova aceitação após expiração; uma prova operacional confirmou uma saída para duas cópias.
+**Validação:** 361 testes aprovados e 15 cenários opt-in/SDK pulados; 8 testes do SDK Flink aprovados; Ruff passou. Três integrações reais passaram. A prova TTL confirmou a aceitação do evento, a rejeição da duplicata e uma nova aceitação após a expiração. Uma prova operacional confirmou uma saída para duas cópias.
 
-## Etapa 6 — Event Time, janelas e checkpoints
+## Etapa 6: Event Time, janelas e checkpoints
 
-**Feito:** watermarks com tolerância a desordem, janelas deslizantes de 30 minutos com avanço de 5 minutos, agregações incrementais e checkpoints filesystem que guardam estado e offsets.
+**Feito:** Configuramos watermarks que toleram eventos fora de ordem e janelas deslizantes de 30 minutos, com avanço a cada 5 minutos. Também implementamos agregações incrementais e checkpoints filesystem para guardar estado e offsets.
 
-**Desafios e correções:** `allowed_lateness` foi ajustado para o tipo de milissegundos exigido pelo binding Python. A ordem de configuração do assigner foi corrigida para sobreviver ao wrapper de idleness. Também foram ajustados o registro da métrica de eventos tardios, a captura do JobID em falhas de QA e a configuração de retenção no coordenador Flink.
+**Desafios e correções:** Ajustamos `allowed_lateness` para o tipo de milissegundos exigido pelo binding Python. Corrigimos a ordem de configuração do assigner para funcionar com o wrapper de idleness. Também ajustamos o registro da métrica de eventos tardios, a captura do JobID em falhas de QA e a configuração de retenção no coordenador Flink.
 
-**Validação:** 371 testes aprovados e 19 cenários opt-in/SDK pulados; SDK Flink: 31 aprovados; Ruff passou. Seis cenários reais foram aprovados em execuções coordenadas, incluindo restauração de checkpoint e recuperação de estado. Quatro checkpoints operacionais concluíram sem falhas durante a observação registrada.
+**Validação:** 371 testes aprovados e 19 cenários opt-in/SDK pulados; 31 testes do SDK Flink aprovados; Ruff passou. Em execuções coordenadas, passaram seis cenários reais, incluindo restauração de checkpoint e recuperação de estado. Durante a observação registrada, quatro checkpoints operacionais terminaram sem falhas.
 
-## Etapa 7 — motor de risco
+## Etapa 7: motor de risco
 
-**Feito:** regras determinísticas `mvp-1` para chuva projetada, vento, rajada e visibilidade; o maior score define a classe. O grafo passou a emitir avaliações de risco mantendo o contrato original das métricas.
+**Feito:** Implementamos as regras determinísticas `mvp-1` para chuva projetada, vento, rajada e visibilidade. O maior score define a classe de risco. O grafo passou a emitir avaliações de risco e manteve o contrato original das métricas.
 
-**Desafios e correções:** a primeira tentativa de regressão temporal disputou o único slot Flink com outra integração; os skips dessa tentativa não foram contados como aprovação e os cenários foram reexecutados de forma coordenada. A migração comprovou que o novo grafo ainda restaura checkpoint da etapa anterior.
+**Desafios e correções:** A primeira tentativa de regressão temporal disputou o único slot Flink com outra integração. Não contamos os skips dessa tentativa como aprovações e reexecutamos os cenários de forma coordenada. A migração confirmou que o novo grafo ainda restaura o checkpoint da etapa anterior.
 
-**Validação:** 482 testes aprovados e 22 cenários opt-in/SDK pulados; SDK Flink: 40 aprovados; Ruff passou. Oito cenários reais passaram, incluindo as regressões anteriores e dois cenários novos de risco. A saída foi conferida para os contratos de 17 e 21 campos. Os scores são heurísticos e não representam probabilidade de prejuízo.
+**Validação:** 482 testes aprovados e 22 cenários opt-in/SDK pulados; 40 testes do SDK Flink aprovados; Ruff passou. Passaram oito cenários reais, incluindo as regressões anteriores e dois cenários novos de risco. Conferimos a saída para os contratos de 17 e 21 campos. Os scores são heurísticos e não representam a probabilidade de prejuízo.
 
-## Etapa 8 — persistência e alertas
+## Etapa 8: persistência e alertas
 
-**Feito:** avaliações persistidas em `climate.weather_metrics`; apenas riscos `HIGH` e `CRITICAL` seguem para `climate.weather_alerts` e `weather.alerts`. Identidades determinísticas e UPSERT permitem replay convergente no PostgreSQL.
+**Feito:** Gravamos as avaliações em `climate.weather_metrics`. Só os riscos `HIGH` e `CRITICAL` seguem para `climate.weather_alerts` e `weather.alerts`. Com identidades determinísticas, o UPSERT faz com que o replay convirja para os mesmos registros da avaliação no PostgreSQL.
 
-**Desafios e correções:** os wrappers Python dos sinks JDBC/Kafka eram incompatíveis com as interfaces dos conectores nativos na combinação Flink/Java 17; adaptadores Java pequenos e linhas `Row` de dois campos resolveram a integração sem trocar os transportes. Um episódio de Metaspace durante várias submissões de QA foi isolado em processo limpo e coberto por regressão; testes de falha dos destinos usaram checkpoints próprios para verificar replay.
+**Desafios e correções:** Os wrappers Python dos sinks JDBC/Kafka não funcionavam com as interfaces dos conectores nativos na combinação Flink/Java 17. Criamos adaptadores Java pequenos e usamos linhas `Row` de dois campos para integrar os conectores sem trocar os transportes. Um problema de Metaspace durante várias submissões de QA foi isolado em um processo limpo e coberto por regressão. Nos testes de falha dos destinos, usamos checkpoints próprios para verificar o replay.
 
-**Validação:** 619 testes aprovados e 30 cenários opt-in/SDK pulados; SDK Flink: 83 aprovados; Ruff passou. Três integrações PostgreSQL reais verificaram migração, privilégios, replay e atomicidade. Cenários reais também cobriram entrega, restauração e falhas dos destinos. PostgreSQL e Kafka mantêm entregas independentes at-least-once; não há transação distribuída.
+**Validação:** 619 testes aprovados e 30 cenários opt-in/SDK pulados; 83 testes do SDK Flink aprovados; Ruff passou. Três integrações reais com PostgreSQL verificaram migração, privilégios, replay e atomicidade. Outros cenários reais cobriram entrega, restauração e falhas dos destinos. PostgreSQL e Kafka mantêm entregas independentes at-least-once, sem transação distribuída.
 
-## Etapa 9 — consumer de alertas
+## Etapa 9: consumer de alertas
 
-**Feito:** consumer de `weather.alerts` com validação estrita do contrato, supressão volátil de duplicatas, logs JSON, healthcheck e confirmação de offset após escrever e descarregar o log.
+**Feito:** Montamos um consumer de `weather.alerts` que valida o contrato, mantém em memória um cache de duplicatas, gera logs JSON e usa healthcheck. Ele confirma o offset depois de escrever e descarregar cada log.
 
-**Desafios e correções:** aninhamento JSON excessivo passou a ser tratado como erro de contrato. Foram corrigidos nomes e tipos de opções da API Kafka nativa, o nome de um módulo de teste que colidia na coleta e a ausência de logs de ciclo de vida esperados. Um reinício externo do JobManager standalone deixou os serviços saudáveis, mas sem job ativo; a operação retomou o job por checkpoint existente, sem alterar o código Flink nem adicionar alta disponibilidade ou ressubmissão automática.
+**Desafios e correções:** Passamos a tratar aninhamento JSON excessivo como erro de contrato. Corrigimos nomes e tipos das opções da API Kafka nativa, o nome de um módulo de teste que colidia durante a coleta e a falta de logs de ciclo de vida esperados. Um reinício externo do JobManager standalone deixou os serviços saudáveis, mas sem job ativo. Retomamos o job usando um checkpoint existente, sem alterar o código Flink nem adicionar alta disponibilidade ou ressubmissão automática.
 
-**Validação:** 692 testes aprovados e 31 cenários opt-in pulados; Ruff passou. Build e integração real passaram; foram verificados alerta válido, duplicata equivalente, mensagem inválida, commits de offsets, estado saudável sem tráfego e retomada com o mesmo grupo. A deduplicação do consumer fica em memória, então reinícios podem repetir logs.
+**Validação:** 692 testes aprovados e 31 cenários opt-in pulados; Ruff passou. O build e a integração real passaram. Verificamos alerta válido, duplicata equivalente, mensagem inválida, commits de offsets, estado saudável sem tráfego e retomada com o mesmo grupo. Como a deduplicação do consumer fica em memória, reinícios podem repetir logs.
 
-## Etapa 10 — fechamento do MVP e CI
+## Etapa 10: fechamento do MVP e CI
 
-**Feito:** workflow CI com jobs de qualidade Python, integração Kafka e SDK Flink; README e documentação de arquitetura revisados. As Actions estão fixadas por SHA e o workflow não publica nem faz deploy.
+**Feito:** Criamos o workflow CI com jobs de qualidade Python, integração Kafka e SDK Flink. Também revisamos o README e a documentação de arquitetura. As Actions estão fixadas por SHA, e o workflow não publica nem faz deploy.
 
-**Desafios e correções:** a imagem SDK combinava instalação de dependências de desenvolvimento com rede desabilitada; a configuração foi corrigida. A captura UTF-8 da saída de QA no Windows também foi ajustada, e o bloco SDK foi executado novamente para confirmar a saída completa. Também na etapa 10, um reinício externo do JobManager deixou os serviços saudáveis, mas sem job ativo; a operação foi retomada por checkpoint existente, sem adicionar alta disponibilidade ou ressubmissão automática.
+**Desafios e correções:** A imagem SDK tentava instalar dependências de desenvolvimento com a rede desabilitada. Corrigimos essa configuração. Também ajustamos a captura UTF-8 da saída de QA no Windows e executamos o bloco SDK de novo para confirmar a saída completa. Nesta etapa, um reinício externo do JobManager também deixou os serviços saudáveis, mas sem job ativo. Retomamos a operação por um checkpoint existente, sem adicionar alta disponibilidade ou ressubmissão automática.
 
-**Validação:** 695 testes aprovados e 31 cenários opt-in/SDK pulados; Ruff e builds das imagens Python e Flink passaram. Os comandos locais equivalentes ao CI passaram: uma integração Kafka real e 61 testes SDK sem skips. O workflow foi revisado estaticamente, mas não foi executado no GitHub Actions; não há remoto configurado. Revisões finais não deixaram achados P1/P2 abertos.
+**Validação:** 695 testes aprovados e 31 cenários opt-in/SDK pulados; Ruff e os builds das imagens Python e Flink passaram. Também passaram os comandos locais equivalentes ao CI: uma integração real com Kafka e 61 testes SDK sem skips. Revisamos o workflow estaticamente, mas não o executamos no GitHub Actions porque não há remoto configurado. As revisões finais não deixaram achados P1/P2 abertos.
 
 ## Limites conhecidos do MVP
 
-O ambiente é local, com um broker Kafka e um slot Flink; não há alta disponibilidade, TLS/SASL/ACL no Kafka ou retomada automática do job após perda do JobManager. Checkpoints protegem estado e offsets do source, mas não tornam os sinks transacionais. O consumer mantém deduplicação apenas em memória. As evidências de recursos são observações de execuções pequenas, não benchmarks de throughput. Dados da API vêm de modelos meteorológicos, e fixtures de QA não representam condições atuais.
+O ambiente roda localmente com um broker Kafka e um slot Flink. Não há alta disponibilidade, TLS/SASL/ACL no Kafka nem retomada automática do job após a perda do JobManager. Checkpoints protegem o estado e os offsets do source, mas não tornam os sinks transacionais. O consumer mantém a deduplicação apenas em memória. As observações de recursos vieram de execuções pequenas e não são benchmarks de throughput. A API fornece dados de modelos meteorológicos, e as fixtures de QA não representam as condições atuais.

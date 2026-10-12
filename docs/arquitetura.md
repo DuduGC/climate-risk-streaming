@@ -1,6 +1,6 @@
 # Arquitetura do projeto
 
-O sistema coleta previsões atuais da Open-Meteo, calcula métricas e risco em janelas e persiste resultados no PostgreSQL. Somente risco `HIGH` ou `CRITICAL` também vira mensagem em `weather.alerts`; o consumer valida essa mensagem e a registra em stdout como JSON.
+O sistema coleta previsões atuais da Open-Meteo. O Flink calcula métricas e riscos em janelas e grava os resultados no PostgreSQL. Quando o risco é `HIGH` ou `CRITICAL`, o Flink também publica um alerta em `weather.alerts`. O consumer valida a mensagem e registra o resultado em JSON no stdout.
 
 ```mermaid
 flowchart LR
@@ -24,7 +24,7 @@ flowchart LR
 | `postgres` | Armazena o catálogo e os fatos do domínio no schema `climate`. |
 | `alert-consumer` | Valida alertas de `weather.alerts`, registra logs JSON e confirma offsets após escrever e descarregar cada log. |
 
-As duas chaves Kafka são o `location_id` codificado em UTF-8. `weather.raw` contém o evento v1; `weather.alerts` contém o alerta de 22 campos e só recebe avaliações elegíveis. Não há Schema Registry: as versões e validações pertencem ao código.
+Os dois tópicos usam o `location_id` codificado em UTF-8 como chave. `weather.raw` contém eventos v1. `weather.alerts` contém alertas com 22 campos e recebe apenas avaliações elegíveis. O código controla as versões e validações; o projeto não usa Schema Registry.
 
 ## Contratos de dados
 
@@ -44,15 +44,15 @@ O Producer serializa `WeatherEvent` como JSON compacto. Os 15 campos validados p
 | `source` | `open-meteo` | Identificador fixo da fonte. |
 | `schema_version` | inteiro `1` | Versão do contrato do evento. |
 
-Os eventos da API representam dados de modelo, não medições de estação. Fixtures históricas são usadas em QA; mensagens e linhas de fixture retidas devem ser distinguidas pelos seus identificadores e timestamps, não apresentadas como alertas meteorológicos atuais.
+A API fornece previsões de modelo, não medições de estações meteorológicas. No QA, usamos fixtures históricas. Identificadores e timestamps ajudam a distinguir mensagens e linhas retidas dessas fixtures, que não representam alertas atuais.
 
 ## Tempo, janelas e risco
 
-O Flink usa `event_timestamp` como Event Time e uma marca d'água com até 120 segundos de desordem; uma partição ociosa é excluída do avanço após 60 segundos. Janelas deslizantes de 30 minutos avançam a cada 5 minutos, alinhadas ao epoch UTC e no intervalo `[início, fim)`. Atraso permitido é zero: os 120 segundos afetam o avanço da marca d'água, mas não reabrem uma janela fechada.
+O Flink usa `event_timestamp` como Event Time. A marca d'água tolera até 120 segundos de desordem; depois de 60 segundos sem atividade, uma partição ociosa deixa de participar do avanço. As janelas deslizantes duram 30 minutos, avançam a cada 5 minutos, seguem o epoch UTC e incluem o início, mas não o fim, no intervalo `[início, fim)`. O atraso permitido é zero. Os 120 segundos afetam o avanço da marca d'água, mas não reabrem uma janela fechada.
 
-A deduplicação de eventos usa a identidade `(location_id, event_timestamp normalizado em UTC)` em estado gerenciado pelo Flink, com TTL de 24 horas em processing time. Repetições não renovam o prazo. As métricas por localidade guardam contagem, média de temperatura, extremos de vento/rajada/visibilidade e intervalos e timestamps extremos. `precipitation_max` é um máximo; a projeção horária usada pelo risco é `precipitation × 3600 / measurement_interval_seconds`, não chuva acumulada na janela.
+O Flink identifica eventos duplicados pela identidade `(location_id, event_timestamp normalizado em UTC)`. Guarda essas identidades em estado gerenciado por 24 horas de processing time. Repetições não renovam esse prazo. Para cada localidade, as métricas guardam a contagem, a média de temperatura, os extremos de vento, rajada e visibilidade, além dos intervalos e timestamps extremos. `precipitation_max` guarda o maior valor. Para calcular o risco, usamos a projeção horária `precipitation × 3600 / measurement_interval_seconds`; ela não representa a chuva acumulada na janela.
 
-A versão atual de regras é `mvp-1`. Cada fator recebe score 0, 25, 50, 75 ou 100; o risco final é o maior score entre os fatores, sem soma. Limites de precipitação, vento e rajada são inclusivos; visibilidade usa limites estritos:
+A versão atual das regras é `mvp-1`. Cada fator recebe score 0, 25, 50, 75 ou 100. O maior score define o risco final; os scores não são somados. Os limites de precipitação, vento e rajada são inclusivos. Os de visibilidade são estritos:
 
 | Fator | Unidade e limites dos scores 25 / 50 / 75 / 100 |
 | --- | --- |
@@ -61,7 +61,7 @@ A versão atual de regras é `mvp-1`. Cada fator recebe score 0, 25, 50, 75 ou 1
 | Rajada máxima | km/h: `>=30 / >=50 / >=80 / >=120` |
 | Visibilidade mínima | m: `<5000 / <2000 / <1000 / <200` |
 
-As faixas são `LOW` (0–24), `MEDIUM` (25–49), `HIGH` (50–74) e `CRITICAL` (75–100). A regra é uma classificação heurística ordinal do MVP; não representa probabilidade de prejuízo. Extremos de uma janela podem vir de observações diferentes.
+As faixas são `LOW` (0–24), `MEDIUM` (25–49), `HIGH` (50–74) e `CRITICAL` (75–100). Essa regra é uma classificação ordinal e heurística do MVP, não uma probabilidade de prejuízo. Os extremos de uma janela podem vir de observações diferentes.
 
 ## PostgreSQL e identidade
 
@@ -71,29 +71,29 @@ As faixas são `LOW` (0–24), `MEDIUM` (25–49), `HIGH` (50–74) e `CRITICAL`
 | `climate.weather_metrics` | Uma avaliação por `(location_id, window_start_ms, window_end_ms, risk_rules_version)`. |
 | `climate.weather_alerts` | Alertas elegíveis; chave primária `alert_id` e unicidade adicional pela identidade da avaliação. |
 
-O `alert_id` é SHA-256 do JSON UTF-8 compacto da identidade `[location_id, window_start_ms, window_end_ms, risk_rules_version]`. O UPSERT de uma avaliação e seu alerta elegível ocorre em uma instrução SQL no PostgreSQL; o replay converge pela identidade e não altera a identidade imutável da métrica. A role de aplicação lê `locations` e tem `SELECT`, `INSERT` e `UPDATE` nas duas tabelas de fatos; não recebe DDL, exclusão ou privilégios administrativos.
+Calculamos `alert_id` com SHA-256 sobre o JSON UTF-8 compacto da identidade `[location_id, window_start_ms, window_end_ms, risk_rules_version]`. Uma única instrução SQL faz o UPSERT da avaliação e, quando elegível, do alerta. No replay, o PostgreSQL reconhece a avaliação pela identidade e mantém a identidade imutável da métrica. A role de aplicação lê `locations` e tem `SELECT`, `INSERT` e `UPDATE` nas duas tabelas de fatos. Ela não recebe DDL, exclusão ou privilégios administrativos.
 
-Checkpoints Flink usam `EXACTLY_ONCE` para estado gerenciado e offsets do source. Essa garantia não se estende aos sinks: o UPSERT torna a persistência SQL repetível, enquanto o sink Kafka é `AT_LEAST_ONCE` e pode repetir alertas após recuperação. Não existe transação distribuída entre PostgreSQL e Kafka. O consumer usa cache FIFO volátil de 10.000 IDs; reinício, evicção ou falha entre o log e o commit podem repetir uma saída. Não há exatamente uma vez ponta a ponta.
+Os checkpoints Flink usam `EXACTLY_ONCE` para o estado gerenciado e os offsets do source. A garantia não cobre os sinks. O UPSERT permite repetir a gravação SQL, enquanto o sink Kafka usa `AT_LEAST_ONCE` e pode repetir alertas após uma recuperação. PostgreSQL e Kafka não participam de uma transação distribuída. O consumer mantém em memória um cache FIFO volátil de 10.000 IDs. Um reinício, uma evicção ou uma falha entre o log e o commit pode repetir uma saída. Não há exatamente uma vez ponta a ponta.
 
 ## Operação, segurança e limites
 
-Os healthchecks indicam prontidão dos serviços. O job precisa aparecer como `RUNNING` em `/jobs/overview`; reiniciar o JobManager standalone pode deixar a infraestrutura saudável sem job ativo. Não há alta disponibilidade nem submissão automática. Consulte o README para os comandos de inicialização, verificação e retomada com o `_metadata` de um checkpoint persistido.
+Os healthchecks mostram se os serviços estão prontos. O job também precisa aparecer como `RUNNING` em `/jobs/overview`. Um reinício do JobManager standalone pode deixar a infraestrutura saudável, mas sem job ativo. Não há alta disponibilidade nem submissão automática. O README traz os comandos de inicialização, verificação e retomada usando o `_metadata` de um checkpoint persistido.
 
-Os limites de memória do Compose somam 4,375 GiB; a recomendação operacional é reservar pelo menos 6 GiB e cerca de 4 vCPUs para o Docker. Em uma execução pequena de entrega registrada na Etapa 8, JobManager e TaskManager foram observados em 551,3 MiB e 594,7 MiB; CPU registrada foi 1,70% e 2,10%, com backpressure `ok`. Essa amostra não é benchmark e não informa throughput sustentado.
+Os limites de memória do Compose somam 4,375 GiB. Para operar, recomendamos reservar pelo menos 6 GiB e cerca de 4 vCPUs para o Docker. Em uma execução pequena de entrega registrada na Etapa 8, o JobManager usou 551,3 MiB e o TaskManager, 594,7 MiB. O uso de CPU registrado foi 1,70% e 2,10%, com backpressure `ok`. Essa amostra não é um benchmark e não informa o throughput sustentado.
 
-Kafka é um nó local com PLAINTEXT, replicação 1 e sem TLS, SASL ou ACLs. O REST Flink é sem autenticação, mas fica vinculado ao loopback do host. Producer e consumer usam UID 10001; Flink executa como usuário `flink`. `.env` guarda credenciais locais fora do Git. A role PostgreSQL da aplicação tem privilégios restritos, e as credenciais administrativas não são fornecidas aos containers Python.
+Kafka roda em um nó local com PLAINTEXT e replicação 1, sem TLS, SASL ou ACLs. A API REST do Flink não tem autenticação e fica vinculada ao loopback do host. Producer e consumer usam UID 10001; Flink roda como usuário `flink`. O arquivo `.env` guarda credenciais locais fora do Git. A role da aplicação no PostgreSQL tem privilégios restritos, e os containers Python não recebem credenciais administrativas.
 
-O consumer pode permanecer saudável sem mensagens novas: healthcheck mede processo, assignment, metadata e heartbeat. Ausência de `alert_received` pode significar que nenhuma janela alcançou HIGH ou CRITICAL; não indica falha por si só. QA usa fixtures, portanto alertas históricos dessa origem também não são evidência de condição atual.
+O consumer pode continuar saudável sem mensagens novas. O healthcheck verifica o processo, o assignment, a metadata e o heartbeat. A falta de `alert_received` pode indicar que nenhuma janela chegou a HIGH ou CRITICAL; por si só, não indica falha. O QA usa fixtures, então alertas históricos gerados a partir delas também não mostram condições atuais.
 
-Melhorias futuras fora do MVP: autenticação e criptografia no Kafka, alta disponibilidade e retomada automatizada do Flink, e deduplicação durável do consumer. O sistema atual opera com um broker e um slot Flink, sem benchmark de throughput ou garantia transacional de ponta a ponta.
+Para uma próxima versão, ficam a autenticação e a criptografia no Kafka, a alta disponibilidade e a retomada automática do Flink, além da deduplicação durável do consumer. Hoje, o sistema opera com um broker e um slot Flink, sem benchmark de throughput ou garantia transacional ponta a ponta.
 
 ## Fontes de verdade
 
-Os contratos, limiares e identidades devem ser conferidos no código e no schema atual: [Compose](../compose.yaml), [modelo do evento](../src/climate_logistics/models.py), [parser e campos](../src/climate_logistics/weather_parser.py), [job Flink](../src/climate_logistics/flink_job.py), [janelas](../src/climate_logistics/flink_temporal.py), [agregações](../src/climate_logistics/temporal_metrics.py), [regras de risco](../src/climate_logistics/risk_engine.py), [registros e hash](../src/climate_logistics/business_records.py), [SQL de negócio](../src/climate_logistics/business_sql.py), [consumer](../src/climate_logistics/alert_consumer.py) e [migração PostgreSQL](../docker/postgres/migrations/001-business-sinks.sql).
+Confira os contratos, limiares e identidades no código e no schema atual: [Compose](../compose.yaml), [modelo do evento](../src/climate_logistics/models.py), [parser e campos](../src/climate_logistics/weather_parser.py), [job Flink](../src/climate_logistics/flink_job.py), [janelas](../src/climate_logistics/flink_temporal.py), [agregações](../src/climate_logistics/temporal_metrics.py), [regras de risco](../src/climate_logistics/risk_engine.py), [registros e hash](../src/climate_logistics/business_records.py), [SQL de negócio](../src/climate_logistics/business_sql.py), [consumer](../src/climate_logistics/alert_consumer.py) e [migração PostgreSQL](../docker/postgres/migrations/001-business-sinks.sql).
 
 ## Arquivos versionados do projeto
 
-O inventário abaixo cobre os arquivos versionados que permanecem no projeto. `.env`, `.venv` e `.git` são locais ou gerados e ficam fora deste inventário; `.env.example` é apenas o modelo versionado de configuração, sem credenciais locais.
+O inventário lista os arquivos versionados do projeto. `.env`, `.venv` e `.git` são locais ou gerados, então ficam de fora. `.env.example` é o modelo versionado de configuração e não contém credenciais locais.
 
 ### Raiz, configuração e documentação
 
