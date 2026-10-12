@@ -1,6 +1,6 @@
 # Etapa 9 — consumer de alertas e observabilidade
 
-**Status:** proposta para aprovação. Data: 2026-10-12. Base: `ecde2e3`, etapa 8 aceita. Principal orquestra e revisa; agentes GPT-6 Luna Max implementam. Escopo: demonstrar o recebimento confiável dos alertas já produzidos, mantendo o MVP simples.
+**Status:** aprovada pelo usuário em 2026-10-12. Data: 2026-10-12. Base: `ecde2e3`, etapa 8 aceita. Principal orquestra e revisa; agentes GPT-6 Luna Max implementam. Escopo: demonstrar o recebimento confiável dos alertas já produzidos, mantendo o MVP simples.
 
 ## Abordagem escolhida
 
