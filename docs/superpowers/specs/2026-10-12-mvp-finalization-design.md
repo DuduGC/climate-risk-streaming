@@ -1,6 +1,6 @@
 # Etapa 10 — finalização do MVP
 
-Status: proposta para revisão do usuário em 2026-10-12. Base: c5187fb, etapa 9 aceita. Principal orquestra, revisa e verifica; implementadores GPT-6 Luna Max.
+Status: aprovada pelo usuário em 2026-10-12. Base: c5187fb, etapa 9 aceita. Principal orquestra, revisa e verifica; implementadores GPT-6 Luna Max.
 
 ## Objetivo e abordagem
 
@@ -29,4 +29,4 @@ Principal revisa CI/documentação e executa suíte geral/Ruff, builds pertinent
 
 Aceite: nenhum P1/P2 aberto, comandos reproduzíveis, CI localmente verificada, documentação coerente e consumer/pipeline operacionais preservados. Comparar IDs dos containers e JobID/checkpoints antes/depois. Registrar evidências em `docs/implementation/stage-10-acceptance.md`; provas temporárias em `.venv` ignorada. Scan seguro de credenciais, diff sem erros, commits locais e checkout limpo. Não configurar remoto, fazer push ou publicar sem solicitação.
 
-Método já escolhido: agentes GPT-6 Luna Max implementam, principal revisa e executa QA. Checkout dedicado foundation reutilizado conforme decisão anterior. A próxima decisão é a revisão desta proposta; depois será escrito um plano curto de execução.
+Método já escolhido: agentes GPT-6 Luna Max implementam, principal revisa e executa QA. Checkout dedicado foundation reutilizado conforme decisão anterior. Especificação aprovada; plano de execução sujeito à revisão do usuário.
