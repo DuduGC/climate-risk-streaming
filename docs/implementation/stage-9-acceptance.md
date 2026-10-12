@@ -30,3 +30,7 @@ Antes da implementação, o JobManager havia reiniciado e não mantinha job ativ
 Logs são at-least-once e cache é somente em memória: restart, evicção e falha entre stdout e commit podem repetir registros. Nenhuma idempotência durável ou entrega transacional de stdout é prometida. Latest no primeiro uso ignora backlog deliberadamente; offsets existentes são preservados. QA é controlada e não constitui alerta meteorológico real.
 
 Checkout foundation dedicado reutilizado; sem merge/push, remoto GitHub não configurado. .env e .venv permanecem ignorados. Etapa 10 será finalização: testes finais, integração, Ruff/Pytest, CI e documentação do MVP.
+
+## Fechamento local
+
+Task1 commit 0750ed9; Task2 commit fe2431a. Scan seguro do index/working tree: 163 caminhos, zero credenciais encontradas; .env e .venv ignorados e sem arquivos rastreados. Diff/index sem erros. Revisao final independente aprovada, nenhum P1/P2 aberto. Nenhum push realizado.
