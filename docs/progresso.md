@@ -1,180 +1,87 @@
-# Progresso — Climate Logistics Streaming Platform
+# Progresso do projeto
 
-Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
+As dez etapas do MVP foram concluídas entre 2026-10-07 e 2026-10-12. Este registro reúne o objetivo, a entrega, os principais desafios e as validações de cada etapa. As contagens de testes abaixo vêm das execuções documentadas no fechamento correspondente; testes opt-in pulados não são apresentados como aprovados.
 
-## Estado
+## Etapa 1 — fundação da infraestrutura
 
-- Etapa 1: concluída; implementação, revisão e critérios de infraestrutura aprovados em 2026-10-07.
-- Etapa 2: concluída; critérios e revisão aprovados em 2026-10-07.
-- Etapa 3: concluída; revisão e critérios aprovados em 2026-10-08.
-- Etapa 4: concluída; critérios/revisão aprovados em 2026-10-09.
-- Etapa 5: concluída; revisão independente e critérios reais aprovados em 2026-10-09 (logs finais em UTC 2026-10-10).
-- Etapa 6: concluída em 2026-10-10; revisão final, seis cenários reais e operação/checkpoints aprovados.
-- Etapas 1–9: concluídas; aceites e evidências de cada etapa estão registrados abaixo.
-- Etapa 10: concluída em 2026-10-12; CI e documentação revisados, gates locais e aceite final aprovados.
-- Implementadores: GPT-6 Luna, raciocínio Max.
-- Branch local `foundation`; sem remoto GitHub configurado.
-- Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
+**Feito:** Compose com Kafka, PostgreSQL, Flink JobManager e TaskManager; bootstrap, healthchecks, volumes, limites de recursos, estrutura Python e documentação inicial.
 
-## Etapa 10 — concluída
+**Desafios e correções:** o primeiro limite de memória não permitiu a prontidão do TaskManager; o processo foi ajustado para 1280 MiB e o container para 1536 MiB. A revisão do README também corrigiu o comando `psql` para testar autenticação TCP por senha e esclareceu a política de retenção do Kafka.
 
-O workflow CI foi registrado no commit local `e6d7443`. Gates locais aprovados pelo principal: suíte Python `695 passed, 31 skipped`, Ruff, builds das imagens Python e Flink, integração Kafka isolada `1 passed` em 33,76 s com cleanup do projeto, e os módulos SDK Flink `61 passed, zero skips` em 18,54 s. Esses resultados não representam execução no GitHub Actions; não há remoto configurado.
+**Validação:** os quatro serviços ficaram saudáveis, o broker respondeu, o Flink registrou um TaskManager e um slot, e verificações operacionais confirmaram autenticação PostgreSQL, privilégios mínimos e persistência após reinício. Ruff passou. Pytest ainda não tinha casos nessa etapa; isso foi registrado como ausência de suíte, não como aprovação de testes.
 
-README e arquitetura atualizados por Luna Max, com revisões independentes aprovadas sem P1/P2. O principal conferiu links, recursos, segurança do workflow e preservação dos seis containers e do job Flink (checkpoint 230 → 244, zero falhas). Aceite final: [stage-10-acceptance.md](implementation/stage-10-acceptance.md). As dez etapas do MVP estão concluídas; CI foi validado por comandos equivalentes locais, sem publicação ou run GitHub.
+## Etapa 2 — cliente Open-Meteo
 
-## Revisão prévia do plano
+**Feito:** modelos imutáveis `Location` e `WeatherEvent`, catálogo de três localidades, normalização do bloco `current` e cliente HTTP com TLS verificado, limites de resposta, timeout e retries controlados.
 
-| Tarefas | Contrato revisado | Resultado |
-| --- | --- | --- |
-| 1 e 2 | Nomes de serviços, variáveis e schema consumidos pelo README | Compatíveis; tarefa 2 após estabilização da infraestrutura |
-| 1 | Arquivos infra, secrets obrigatórios, healthchecks e checks reais | Coerentes |
-| 2 | Estrutura sem lógica futura, Ruff e ausência honesta de casos Pytest | Coerentes |
-| Validação final | Prontidão, login restrito, persistência e reinício | Aceite condicionado à execução real |
+**Desafios e correções:** corrigida a conversão de timestamps com offsets que saíam do domínio UTC aceito. JSON excessivamente profundo ou com inteiros extremos passou a virar erro de domínio, sem retry indevido. O README ganhou instruções de `PYTHONPATH` para o pacote em `src`.
 
-## Decisões de execução
+**Validação:** suíte Python: 291 aprovados e 1 cenário live pulado; Ruff passou. O smoke opt-in contra a API pública passou com 1 caso. Os dados continuam sendo previsões de modelo, e os timeouts HTTP não formam um prazo total absoluto.
 
-- Ruling: usar o diretório dedicado inicial e branch foundation — plano aprovado prevê Git novo sem checkout redundante — custo se inadequado: isolamento adicional posterior.
-- Ruling: armazenar briefs e relatórios em docs/implementation no Windows — manter trilha legível sem depender de scripts Bash auxiliares — custo: arquivos adicionais de documentação.
+## Etapa 3 — Producer e Kafka
 
-## Evidências
+**Feito:** publicação dos eventos validados em `weather.raw`, criação e conferência dos tópicos, CLI contínua e `--once`, logs JSON e imagem Python não-root. O Producer não recebe credenciais PostgreSQL.
 
-- `docker version`: exit 0; engine Linux/amd64.
-- `git init -b foundation`: exit 0.
-- Primeira inicialização: Kafka/PostgreSQL/JobManager saudáveis; TaskManager falhou por orçamento de memória insuficiente.
-- Correção pelo agente infra: TaskManager processo 1280 MiB, container 1536 MiB. Revisor independente confirmou P1 resolvido.
-- `docker compose up -d --wait --wait-timeout 180`: exit 0, quatro serviços saudáveis.
-- Kafka `kafka-broker-api-versions.sh --bootstrap-server kafka:9092`: exit 0, broker id 1 respondeu.
-- Flink REST `/taskmanagers`: exatamente um TaskManager e um slot livre, antes e depois do reinício.
-- Script `verify-postgres.sh`: login TCP autenticado, privilégios administrativos ausentes, USAGE em climate e CREATE negado em climate/public.
-- Script `verify-persistence.sh before/after`: marcador persistiu após reinício; tabela/schema técnicos removidos após teste.
-- `docker compose restart` seguido de `up -d --wait`: exit 0, recuperação dos quatro serviços.
-- Bootstrap com senha contendo aspas simples/duplas, espaços, ponto e vírgula, barra e dólar: login/privilégios passaram em projeto isolado `climate-foundation-verification`.
-- PostgreSQL de validação parado; volume isolado preservado. Nenhum volume foi removido.
-- `docker compose --env-file .env.example config --quiet`: exit 1 por senhas vazias; `docker compose config --quiet` com `.env` local: exit 0.
-- `.env` confirmado ignorado pelo Git; scripts shell com finais LF.
-- Ruff 0.14.0 em Python 3.11.14: `All checks passed!`.
-- Pytest 8.4.2: 0 casos coletados, exit 5 confirmado; ausência de suíte nesta etapa explicitamente documentada, não reportada como testes aprovados.
-- Consumo observado sem jobs: Kafka ~324 MiB, JobManager ~203 MiB, TaskManager ~310 MiB, PostgreSQL ~23 MiB. São medições de fundação ociosa, sem inferência sobre throughput.
-- Processos JVM do JobManager/TaskManager rodam como usuário `flink`; Kafka como `appuser`.
-- Kafka `meta.properties` mantém cluster ID configurado após reinício.
-- Revisão final encontrou P2 no comando psql do README: socket local não comprova senha. Implementador corrigiu para `-h 127.0.0.1` e explicitou autenticação TCP; checks reais já usavam TCP.
-- Senha incorreta em psql/TCP: rejeitada por PostgreSQL, conforme esperado.
-- P3 documental: retenção Kafka incluída no README (24 horas, 1 GiB por partição, segmentos 256 MiB, limpeza 5 minutos; sem alegar teto rígido de disco).
-- Revisão final independente: P2/P3 resolvidos, nenhum achado remanescente.
-- `.gitattributes` preserva LF em scripts shell nos checkouts Windows; linhas vazias extras corrigidas após `git diff --cached --check`.
-- Verificação dos valores locais de credenciais nos arquivos preparados para versionamento: zero ocorrências; `.env` fora do índice.
+**Desafios e correções:** foram reforçadas a validação da topologia de tópicos existentes, a contagem de confirmações em lotes com falha parcial e a aplicação dos prazos de retry. Um erro transitório `NOT_LEADER_FOR_PARTITION` levou o observador de testes a atualizar metadata e repetir somente dentro do prazo configurado.
 
-## Tarefas
+**Validação:** 329 testes aprovados e 4 opt-in pulados; Ruff passou. Três integrações reais com Kafka/API passaram. O build, a entrega de três localidades, a identidade não-root e o encerramento por SIGTERM foram verificados. Idempotência de sessão não elimina repetição lógica entre ciclos ou reinícios.
 
-- Tarefa 1: implementada, revisada e verificada; P1 de memória corrigido.
-- Tarefa 2: concluída; estrutura, exclusões, dependências fixadas e README revisados.
-- Validação runtime: concluída; revisão final sem bloqueadores funcionais.
+## Etapa 4 — Kafka para Flink
 
-## Aceite da Etapa 1
+**Feito:** runtime PyFlink comum aos dois nós, leitura de `weather.raw`, parser tipado, métricas de ingestão, diagnóstico JSON e modos bounded para QA e unbounded para operação.
 
-Os quatro serviços permanecem saudáveis. O comando `docker compose up -d` subiu a infraestrutura; `--wait` comprovou prontidão com prazo limitado. Os testes operacionais descritos acima passaram; Pytest permanece sem casos e não é usado como evidência funcional desta etapa. Nenhum job, integração Open-Meteo, topic ou tabela de negócio foi antecipado.
+**Desafios e correções:** a primeira execução real falhou porque o runtime PyFlink usa `get_metrics_group()`, e não `get_metric_group()`. A chamada foi corrigida e ganhou regressão. Também foram rejeitadas strings JSON com surrogates inválidos antes da serialização para o formato de linha Flink.
 
-Etapa 2 concluída. Ledger: docs/implementation/stage-2-progress.md.
+**Validação:** 346 testes aprovados e 6 opt-in/SDK pulados; Ruff passou. O SDK PyFlink e uma integração Kafka→Flink bounded passaram. A execução operacional recebeu confirmação REST de estado `RUNNING` e produziu diagnóstico da fixture. Checkpoints e recuperação ainda não faziam parte desta etapa.
 
-## Etapa 2 — Open-Meteo concluída
+## Etapa 5 — qualidade temporal e deduplicação
 
-Implementadores: GPT-6 Luna Max, tarefas sequenciais; revisão independente por contrato e final.
+**Feito:** validação de coerência entre horário do evento, ingestão e relógio observado; identidade por localidade e instante UTC; deduplicação em `MapState` com TTL de 24 horas e métricas de decisões.
 
-Implementado:
-- Location/WeatherEvent imutáveis, localidades RJ01/SP01/CT01, validação direta e normalização pura.
-- Schema versão 1 com source=open-meteo e measurement_interval_seconds, unidades fixas e timestamps UTC/Z.
-- Cliente HTTP síncrono Requests 2.34.2: timeout de conexão/leitura de 3/10 s, até 3 tentativas, backoff de 0,5/1 s e Retry-After até 5 s.
-- TLS verificado, redirects recusados, sessão própria sem configuração .netrc, respostas sempre fechadas e teto de 128 KiB descomprimidos.
-- Testes unitários, integração HTTP real no loopback e smoke público opt-in; README atualizado.
+**Desafios e correções:** o QA exigia a duração do bundle em milissegundos numéricos. Uma prova real mostrou que o cache de estado Python do SDK podia manter visível um marcador expirado; o pipeline passou a configurar `python.state.cache-size=0`. A janela do teste TTL foi ampliada para dar margem ao overhead do Docker e continuar distinguindo expiração de renovação.
 
-Evidências verificadas pelo principal em Python 3.11.14:
-- Primeira tarefa:245 testes passaram e Ruff aprovado após correção UTC.
-- Suíte final offline:291 passed, 1 skipped, exit 0, em 5,84 s.
-- Ruff final:All checks passed, exit 0.
-- Smoke OPEN_METEO_LIVE=1: 1 passed, exit 0, em 0,77 s; evento RJ01 obtido da API e serializado conforme contrato.
-- Revisão final: ambos P2 resolvidos, sem achados abertos.
-- git diff --check sem erros antes do registro final.
+**Validação:** 361 testes aprovados e 15 cenários opt-in/SDK pulados; SDK Flink: 8 aprovados; Ruff passou. Três integrações reais passaram. A prova TTL confirmou aceitação, rejeição de duplicata e nova aceitação após expiração; uma prova operacional confirmou uma saída para duas cópias.
 
-Problemas e correções:
-- Artefato de newline em teste: literal removido, todos os cenários preservados.
-- Datetime aware cuja conversão UTC sai do domínio: construção rejeita WeatherValidationError; regressões red/green.
-- JSON com inteiro com 5000 dígitos/aninhamento extremo:ValueError/RecursionError convertidos em OpenMeteoError, sem retry e com resposta fechada.
-- README sem caminho de importação src: PYTHONPATH documentado em PowerShell/Linux.
-- Importação fora de ordem apontada por Ruff: corrigida.
+## Etapa 6 — Event Time, janelas e checkpoints
 
-Limitações:
-- Dados da fonte são modelados, não observações de estação; precipitação corresponde ao intervalo retornado.
-- Timeouts de conexão/leitura não são deadline absoluto; Retry-After em formato de data usa backoff local.
-- Python 3.11 é o ambiente de referência dos testes. Revisão de código não substitui a execução nessa versão.
-- Nenhum polling, Producer, topic Kafka, job Flink, sink ou serviço novo foi antecipado.
+**Feito:** watermarks com tolerância a desordem, janelas deslizantes de 30 minutos com avanço de 5 minutos, agregações incrementais e checkpoints filesystem que guardam estado e offsets.
 
-Etapa 3 em execução. Ledger: docs/implementation/stage-3-progress.md.
+**Desafios e correções:** `allowed_lateness` foi ajustado para o tipo de milissegundos exigido pelo binding Python. A ordem de configuração do assigner foi corrigida para sobreviver ao wrapper de idleness. Também foram ajustados o registro da métrica de eventos tardios, a captura do JobID em falhas de QA e a configuração de retenção no coordenador Flink.
 
-## Etapa 3 — Python Producer + Kafka concluída
+**Validação:** 371 testes aprovados e 19 cenários opt-in/SDK pulados; SDK Flink: 31 aprovados; Ruff passou. Seis cenários reais foram aprovados em execuções coordenadas, incluindo restauração de checkpoint e recuperação de estado. Quatro checkpoints operacionais concluíram sem falhas durante a observação registrada.
 
-Implementação por GPT-6 Luna Max; revisão independente e validação pelo principal em 2026-10-08.
+## Etapa 7 — motor de risco
 
-Implementado: publisher com confirmação de delivery, startup idempotente dos topics, CLI contínua/--once, logs JSON, container Producer não-root e configuração pública separada dos secrets PostgreSQL.
+**Feito:** regras determinísticas `mvp-1` para chuva projetada, vento, rajada e visibilidade; o maior score define a classe. O grafo passou a emitir avaliações de risco mantendo o contrato original das métricas.
 
-Evidências do principal:
-- Python 3.11.14: 329 passed, 4 skipped em 6,02 s; Ruff aprovado.
-- Kafka real: fixture, falha do SDK contra porta fechada e API→CLI→Kafka com consumo verificado: 3 passed em 13,30 s.
-- weather.raw e weather.alerts: três partições, replicação 1, líder/ISR ativos em todas.
-- Build final aprovado. Container coleta, aceita e confirma três eventos por ciclo.
-- UID/GID 10001; nenhuma variável POSTGRES_/APP_DB_ no Producer; sem porta publicada.
-- Parada SIGTERM: exit 0 em cerca de 1,06 s. Após reinício, topics existentes reconhecidos e novo ciclo de três entregas confirmado.
-- weather.alerts permanece vazio: offsets 0 nas três partições.
-- Memória observada do Producer: cerca de 25,5 MiB no limite de 256 MiB; medição de um ciclo pequeno, não benchmark de throughput.
-- Revisão scoped: cinco achados resolvidos, sem pendências.
+**Desafios e correções:** a primeira tentativa de regressão temporal disputou o único slot Flink com outra integração; os skips dessa tentativa não foram contados como aprovação e os cenários foram reexecutados de forma coordenada. A migração comprovou que o novo grafo ainda restaura checkpoint da etapa anterior.
 
-Problemas corrigidos: validação de metadata dos topics existentes; logs INFO da CLI; comando Docker --once; retry depois do deadline; contagem de ACKs em lote parcialmente falho. Observer de testes passou a atualizar metadata/repetir somente erros transitórios sob deadline de 15 s após erro NOT_LEADER_FOR_PARTITION no primeiro startup.
+**Validação:** 482 testes aprovados e 22 cenários opt-in/SDK pulados; SDK Flink: 40 aprovados; Ruff passou. Oito cenários reais passaram, incluindo as regressões anteriores e dois cenários novos de risco. A saída foi conferida para os contratos de 17 e 21 campos. Os scores são heurísticos e não representam probabilidade de prejuízo.
 
-Limites: idempotência Kafka dentro da sessão não elimina duplicações de negócio entre polls/reinícios; deduplicação na Etapa 5. Dados meteorológicos modelados e intervalo da precipitação preservados. Sem HA/TLS/SASL/ACL no broker local.
+## Etapa 8 — persistência e alertas
 
-Producer contínuo deixado em execução. Nenhum volume, topic ou registro foi removido. Próxima etapa: Etapa 4 — Kafka → Flink, ainda não iniciada.
+**Feito:** avaliações persistidas em `climate.weather_metrics`; apenas riscos `HIGH` e `CRITICAL` seguem para `climate.weather_alerts` e `weather.alerts`. Identidades determinísticas e UPSERT permitem replay convergente no PostgreSQL.
 
-## Etapa 4 — Kafka → Flink concluída
+**Desafios e correções:** os wrappers Python dos sinks JDBC/Kafka eram incompatíveis com as interfaces dos conectores nativos na combinação Flink/Java 17; adaptadores Java pequenos e linhas `Row` de dois campos resolveram a integração sem trocar os transportes. Um episódio de Metaspace durante várias submissões de QA foi isolado em processo limpo e coberto por regressão; testes de falha dos destinos usaram checkpoints próprios para verificar replay.
 
-Implementação GPT-6 Luna Max; revisão independente e validação pelo principal em 2026-10-09.
+**Validação:** 619 testes aprovados e 30 cenários opt-in/SDK pulados; SDK Flink: 83 aprovados; Ruff passou. Três integrações PostgreSQL reais verificaram migração, privilégios, replay e atomicidade. Cenários reais também cobriram entrega, restauração e falhas dos destinos. PostgreSQL e Kafka mantêm entregas independentes at-least-once; não há transação distribuída.
 
-Implementado:
-- Runtime comum JM/TM: Flink/PyFlink 1.20.3, Java17, CPython3.11.14 compilado de fonte verificada e conector Kafka3.3.0-1.20 com SHA256 fixado.
-- KafkaSource weather.raw, earliest, auto-commit false, paralelismo1/no-watermarks; parser puro e Row tipada com15 campos.
-- Diagnóstico JSON/PrintSink e métricas parsed_records/invalid_records, sem payload completo em erros.
-- Job bounded isolado de QA e unbounded operacional; CLI/list/cancel documentados.
+## Etapa 9 — consumer de alertas
 
-Evidências do principal:
-- Build aprovado, SSL/ctypes/sqlite/bz2/lzma e PyFlink importam nos dois nós; versões3.11.14/1.20.3 confirmadas.
-- Suíte leve CPython3.11.14:346 passed,6 skipped em6,30s; Ruff aprovado.
-- Regressão get_metrics_group no runtime PyFlink:1 passed em0,37s. Aviso de cache Pytest ocorreu somente por bind de testes readonly no container temporário.
-- Integração Kafka→Flink bounded:1 passed em18,06s, FINISHED viaREST, diagnóstico JSON completo da fixture e log controlado de invalid_records.
-- Job operacional4de3a42bec3d9d68a659f5cce2064247 (weather-kafka-ingestion):RUNNING. Source/parser/diagnóstico/Sink RUNNING com paralelismo1.
-- Evento novo OP-1d7e85dee11d44be:1 ACK Kafka e PrintSink correspondente com timestamps11:20:23.201871Z/schema1.
-- Um TaskManager/um slot ocupado. JM/TM userflink, sem variáveis PostgreSQL.
-- Memória observada durante processamento:TM571MiB/limite1536MiB, JM286MiB/limite1GiB; sem necessidade de aumentar recursos.
-- Producer segue funcionando:novo ciclo confirmou collected3/accepted3/delivered3.
-- Review final aprovada, sem P1/P2 abertos; git diff --check aprovado.
+**Feito:** consumer de `weather.alerts` com validação estrita do contrato, supressão volátil de duplicatas, logs JSON, healthcheck e confirmação de offset após escrever e descarregar o log.
 
-Problemas/correções:
-- Submissão python -m poderia criar execução local: substituída por flink run -d -py com JobID nativo e comprovação REST.
-- Primeiro teste real falhou ao abrir métricas: get_metric_group não existe no runtime Python. Corrigido para get_metrics_group, com regressão RED/GREEN e novo teste real.
-- Strings JSON com surrogate escapado: rejeitadas antes da serialização Row.
-- Prova/cleanup do teste fortalecidos:diagnóstico completo, ID preservado, cancelamento apenas do job de teste sob prazo limitado.
+**Desafios e correções:** aninhamento JSON excessivo passou a ser tratado como erro de contrato. Foram corrigidos nomes e tipos de opções da API Kafka nativa, o nome de um módulo de teste que colidia na coleta e a ausência de logs de ciclo de vida esperados. Um reinício externo do JobManager standalone deixou os serviços saudáveis, mas sem job ativo; a operação retomou o job por checkpoint existente, sem alterar o código Flink nem adicionar alta disponibilidade ou ressubmissão automática.
 
-Limites preservados:sem checkpoint/retomada/exactly-once ou política temporal/deduplicação/sinks de negócio. Submissão do job ainda manual; restart completo do cluster exige reenvio. Erros conhecidos de parsing são descartados/logados, regras adicionais ficam na Etapa5.
+**Validação:** 692 testes aprovados e 31 cenários opt-in pulados; Ruff passou. Build e integração real passaram; foram verificados alerta válido, duplicata equivalente, mensagem inválida, commits de offsets, estado saudável sem tráfego e retomada com o mesmo grupo. A deduplicação do consumer fica em memória, então reinícios podem repetir logs.
 
-Job operacional e Producer deixados ativos. Nenhum volume/topic/registro/grupo alheio foi removido. Próxima etapa:Etapa5 — Data Quality, ainda não iniciada.
+## Etapa 10 — fechamento do MVP e CI
 
+**Feito:** workflow CI com jobs de qualidade Python, integração Kafka e SDK Flink; README e documentação de arquitetura revisados. As Actions estão fixadas por SHA e o workflow não publica nem faz deploy.
 
-## Aceite da Etapa 5
+**Desafios e correções:** a imagem SDK combinava instalação de dependências de desenvolvimento com rede desabilitada; a configuração foi corrigida. A captura UTF-8 da saída de QA no Windows também foi ajustada, e o bloco SDK foi executado novamente para confirmar a saída completa. Também na etapa 10, um reinício externo do JobManager deixou os serviços saudáveis, mas sem job ativo; a operação foi retomada por checkpoint existente, sem adicionar alta disponibilidade ou ressubmissão automática.
 
-Qualidade temporal e deduplicação com MapState/TTL86400 implementadas por GPT-6 Luna Max. Suíte361 passed/15 skipped, SDK8 passed, Ruff aprovado e três integrações reais aprovadas (74,65 s). Problemas de configuração QA e cache de leitura PyFlink corrigidos e protegidos por regressões. Prova operacional: uma saída para duas cópias, duplicate_records41→42. Job27e5e15139ad82f8beb22c40025c95bf permanece RUNNING. Revisão independente: sem P1/P2 abertos. Evidências e limites em docs/implementation/stage-5-acceptance.md. Etapa6 não iniciada.
+**Validação:** 695 testes aprovados e 31 cenários opt-in/SDK pulados; Ruff e builds das imagens Python e Flink passaram. Os comandos locais equivalentes ao CI passaram: uma integração Kafka real e 61 testes SDK sem skips. O workflow foi revisado estaticamente, mas não foi executado no GitHub Actions; não há remoto configurado. Revisões finais não deixaram achados P1/P2 abertos.
 
+## Limites conhecidos do MVP
 
-## Aceite da Etapa 6
-
-Event Time, watermarks, janelas30/5, agregados e checkpoints filesystem implementados e revisados. Final371passed/19skipped; SDK31passed; Ruff aprovado; seis cenários reais comPASS em execuções coordenadas (skip não contado). Operacional762137e915474bd6827555e68fc8e4c6 RUNNING; métricasCT01/RJ01/SP01; checkpoint60s e quatroCPs completos semfalha. Producer3/3 no último ciclo verificado. Evidências/limites/decisões em docs/implementation/stage-6-acceptance.md. Etapa7nãoiniciada.
-
-## Aceite da Etapa 7
-
-Motor de risco determinístico mvp-1 implementado por agente GPT-6 Luna Max; principal orquestrou, revisou e validou. Suíte482passed/22skips, SDK40passed, Ruff aprovado e oito cenários reais comPASS (seisregressões+doisnovos), incluindo checkpoint criado pelo grafo6. Revisãoindependente semP1/P2. Únicojob3caa432342067923b7edae698657e8d6RUNNING, restaurouCP37 e concluiuCP38, com métricas17 e riscos21 deCT01/RJ01/SP01. Producer3/3; checkpoints60s/backpressureok/recursosmantidos. Evidências e limites em docs/implementation/stage-7-acceptance.md. Próxima:Etapa8—sinks de negócio/persistência e alertas, ainda não iniciada.
+O ambiente é local, com um broker Kafka e um slot Flink; não há alta disponibilidade, TLS/SASL/ACL no Kafka ou retomada automática do job após perda do JobManager. Checkpoints protegem estado e offsets do source, mas não tornam os sinks transacionais. O consumer mantém deduplicação apenas em memória. As evidências de recursos são observações de execuções pequenas, não benchmarks de throughput. Dados da API vêm de modelos meteorológicos, e fixtures de QA não representam condições atuais.

@@ -1,9 +1,0 @@
-# Etapa 10 — revisão independente da Task 1
-
-Base de comparação: `65ea7fc`. Fonte revisada: `.github/workflows/ci.yml` congelado em 2026-10-12, contra a especificação e o plano de finalização do MVP. Revisão estática, sem executar testes, Docker ou rede.
-
-**Parecer: nenhum P1/P2 adicional identificado.** O P2 conhecido, em que `--network none` impedia instalar as dependências dev para os testes SDK, está corrigido: o container temporário agora permite a instalação. O passo valida Python 3.11.14 e PyFlink 1.20.3 antes de rodar os quatro módulos, e um plugin Pytest transforma skips de coleta ou de teste em falha.
-
-O job `quality` usa as dependências existentes, suíte geral e Ruff. O job `python-kafka` cria nome de projeto e tag de imagem próprios por run/attempt, fornece apenas valores fictícios para interpolação do Compose, constrói a imagem Python compartilhada, inicia somente Kafka, cria `weather.alerts` com três partições e replicação 1 antes da integração e executa o teste existente. O cleanup `always()` faz `down` do projeto próprio e busca containers restantes pelo label desse projeto. O job `flink-sdk` constrói o Dockerfile existente e monta o checkout somente para leitura no container temporário. Os três jobs têm runner e timeouts previstos; token com `contents: read`, checkout sem credenciais persistidas, actions fixadas em SHAs completos, sem publicação ou deploy.
-
-O relatório do implementador registra as referências oficiais dos dois SHAs; a verificação externa dos pins e a execução local dos comandos pertencem ao principal. Este parecer não atesta execução no GitHub. O principal informou integração Kafka em projeto novo concluída com cleanup próprio, suíte geral `695 passed, 31 skipped`, Ruff e os dois builds aprovados; a execução exata do bloco SDK ainda estava em andamento quando este parecer estático foi fechado.

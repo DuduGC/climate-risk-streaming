@@ -1,6 +1,6 @@
 # Climate Logistics Streaming Platform
 
-MVP local de streaming climático: o Producer consulta dados modelados da Open-Meteo e publica eventos no Kafka; um job Flink valida e agrega esses eventos, calcula risco por janela, grava métricas no PostgreSQL e publica alertas HIGH/CRITICAL em `weather.alerts`; o consumer valida e registra alertas em logs JSON. A arquitetura e os contratos estão descritos em [docs/architecture.md](docs/architecture.md), com o código como fonte de verdade.
+MVP local de streaming climático: o Producer consulta dados modelados da Open-Meteo e publica eventos no Kafka; um job Flink valida e agrega esses eventos, calcula risco por janela, grava métricas no PostgreSQL e publica alertas HIGH/CRITICAL em `weather.alerts`; o consumer valida e registra alertas em logs JSON. Consulte a [arquitetura do projeto](docs/arquitetura.md), com o código como fonte de verdade, e o [progresso das dez etapas](docs/progresso.md).
 
 ## Requisitos e recursos
 
@@ -382,4 +382,4 @@ Eles gravam um seed LOW em RJ01 em T−60 minutos antes do checkpoint C, depois 
 
 Validação real final da Tarefa 3: delivery/replay entregou 24 métricas e 12 alertas; a migração do checkpoint Stage 7 entregou 12 métricas/seis alertas alvo e limpou somente o delta do backlog; os faults JDBC e Kafka recuperaram de C2 para C3 e convergiram em 12 métricas/seis alertas, com mensagens repetidas equivalentes. Os quatro cenários passaram no gate do Root.
 
-Para contratos, fluxo, identidade dos registros, garantias e limites atuais, consulte [docs/architecture.md](docs/architecture.md).
+Para contratos, fluxo, identidade dos registros, garantias e limites atuais, consulte [a arquitetura](docs/arquitetura.md). O histórico de entregas, desafios e validações por etapa está em [docs/progresso.md](docs/progresso.md).
