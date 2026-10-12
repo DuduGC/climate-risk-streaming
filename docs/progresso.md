@@ -11,16 +11,16 @@ Plano: `docs/superpowers/plans/2026-10-07-fundacao.md`
 - Etapa 5: concluída; revisão independente e critérios reais aprovados em 2026-10-09 (logs finais em UTC 2026-10-10).
 - Etapa 6: concluída em 2026-10-10; revisão final, seis cenários reais e operação/checkpoints aprovados.
 - Etapas 1–9: concluídas; aceites e evidências de cada etapa estão registrados abaixo.
-- Etapa 10: em verificação; Tarefa 1 aprovada localmente e Tarefa 2 documental preparada para revisão/aceite final do principal.
+- Etapa 10: concluída em 2026-10-12; CI e documentação revisados, gates locais e aceite final aprovados.
 - Implementadores: GPT-6 Luna, raciocínio Max.
 - Branch local `foundation`; sem remoto GitHub configurado.
 - Docker Desktop confirmado: engine Linux/amd64 acessível com permissão fora do sandbox.
 
-## Etapa 10 — verificação em andamento
+## Etapa 10 — concluída
 
 O workflow CI foi registrado no commit local `e6d7443`. Gates locais aprovados pelo principal: suíte Python `695 passed, 31 skipped`, Ruff, builds das imagens Python e Flink, integração Kafka isolada `1 passed` em 33,76 s com cleanup do projeto, e os módulos SDK Flink `61 passed, zero skips` em 18,54 s. Esses resultados não representam execução no GitHub Actions; não há remoto configurado.
 
-A Tarefa 2 atualiza README, arquitetura e este status, sem alterar produto, testes ou CI. A etapa permanece em verificação até a revisão documental e os gates finais do principal.
+README e arquitetura atualizados por Luna Max, com revisões independentes aprovadas sem P1/P2. O principal conferiu links, recursos, segurança do workflow e preservação dos seis containers e do job Flink (checkpoint 230 → 244, zero falhas). Aceite final: [stage-10-acceptance.md](implementation/stage-10-acceptance.md). As dez etapas do MVP estão concluídas; CI foi validado por comandos equivalentes locais, sem publicação ou run GitHub.
 
 ## Revisão prévia do plano
 

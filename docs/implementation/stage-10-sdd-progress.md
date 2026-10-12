@@ -23,3 +23,5 @@ Task 2: em execução — fresh Luna Max; brief stage-10-task-2-brief.md, soment
 Task1 commit e6d7443. Ruling: não adicionar PyYAML apenas para parser extra de workflow — imagem não contém yaml; revisão estática independente mais comandos reais atendem gates sem dependência nova. Sintaxe e semântica GitHub serão definitivamente confirmadas por run remoto quando solicitado; não houve run remoto.
 
 Task 2: complete — fresh Luna Max, documentação frozen. Reviewer stage10_docs_review SolHigh aprovou zeroP1/P2; Root15 links locais/zeroquebrados e diffcheckPASS. Código produto/CI não alterados; testes anteriores permanecem pertinentes. Prova final6IDsiguais, Job60b77... RUNNING CP230→244 failed0, recursosQA propios removidos. Revisão ampla AstraHigh em andamento.
+
+Etapa 10 concluída: Task1e6d7443/Task2f40dc08, finalreviewAstraHigh aprovado semP1/P2, gateslocaisfechados, seisIDs/jobpreservadosCP244/0falhas. Docsprogresso atualizado; aceitefinalstage-10-acceptance.md. Scan e fechamento doindex/commit final peloRoot. Sempush/runGitHub/deploy.
