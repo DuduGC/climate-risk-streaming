@@ -44,14 +44,15 @@ RUN curl --fail --location --retry 5 --retry-delay 2 --connect-timeout 10 --max-
     && /opt/python3.11/bin/python3.11 --version \
     && rm -rf /tmp/Python-3.11.14 /tmp/Python-3.11.14.tar.xz
 
-COPY requirements-flink.txt /tmp/requirements-flink.txt
+COPY requirements.txt /tmp/requirements.txt
 
 RUN /opt/python3.11/bin/python3.11 -m pip install \
         --disable-pip-version-check \
         --no-cache-dir \
         --prefix=/opt/python3.11 \
-        -r /tmp/requirements-flink.txt \
-    && rm /tmp/requirements-flink.txt
+        -c /tmp/requirements.txt \
+        apache-flink \
+    && rm /tmp/requirements.txt
 
 FROM python-builder AS java-builder
 

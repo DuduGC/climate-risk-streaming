@@ -258,15 +258,17 @@ No Linux, use `FLINK_INTEGRATION=1 python -m pytest tests/integration/test_kafka
 
 ## Python e qualidade
 
-O código Python e a imagem compartilhada do Producer/consumer usam Python 3.11. Crie um ambiente virtual e instale as dependências fixadas:
+O código Python e a imagem compartilhada do Producer/consumer usam Python 3.11. Crie um ambiente virtual e instale o subconjunto de aplicação e qualidade, validado pelas versões fixadas no arquivo único de dependências:
 
 ~~~powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt -r requirements-dev.txt
+python -m pip install -c requirements.txt requests confluent-kafka pytest ruff
 python -m pytest -q
 python -m ruff check src tests
 ~~~
+
+A instalação completa, `python -m pip install -r requirements.txt`, inclui também os pacotes opcionais de desenvolvimento e PyFlink, que requer Java 17 no runtime. Para executar os testes do SDK PyFlink, recomendamos usar a imagem Flink do projeto, que já contém esse runtime.
 
 No Linux, crie/ative o ambiente com python3.11 -m venv .venv e source .venv/bin/activate. A suíte padrão é offline e o smoke live é pulado explicitamente. Os testes HTTP usam um servidor local no loopback.
 

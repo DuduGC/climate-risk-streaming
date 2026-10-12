@@ -93,7 +93,13 @@ Confira os contratos, limiares e identidades no código e no schema atual: [Comp
 
 ## Arquivos versionados do projeto
 
-O inventário lista os arquivos versionados do projeto. `.env`, `.venv` e `.git` são locais ou gerados, então ficam de fora. `.env.example` é o modelo versionado de configuração e não contém credenciais locais.
+O inventário lista os 78 arquivos versionados do projeto. `.env`, `.venv` e `.git` são locais ou gerados, então ficam de fora. `.env.example` é o modelo versionado de configuração e não contém credenciais locais.
+
+`requirements.txt` é o único arquivo de dependências. Ele reúne as versões fixadas da aplicação (`requests==2.34.2`, `confluent-kafka==2.12.2`), da qualidade (`pytest==8.4.2`, `ruff==0.14.0`) e do Flink (`apache-flink==1.20.3`).
+
+Cada componente instala apenas os pacotes de que precisa. A opção `-c requirements.txt` faz o pip usar as versões fixadas nesse arquivo, sem instalar todos os pacotes listados. Producer e consumer usam os dois pacotes da aplicação. A qualidade local e os jobs `quality` e `python-kafka` da CI usam os pacotes da aplicação e as ferramentas de qualidade. A imagem Flink instala apenas `apache-flink`; o job `flink-sdk` instala `pytest` e `ruff` sobre o runtime que já está na imagem.
+
+Assim, cada pacote tem sua versão declarada uma vez e cada imagem recebe apenas as dependências necessárias.
 
 ### Raiz, configuração e documentação
 
@@ -107,9 +113,7 @@ O inventário lista os arquivos versionados do projeto. `.env`, `.venv` e `.git`
 | `README.md` | Orienta preparação, operação, verificação, QA e limites do MVP. |
 | `compose.yaml` | Define serviços, redes, volumes, recursos, healthchecks e configuração local do sistema. |
 | `pyproject.toml` | Configura projeto Python, pytest, Ruff e metadados das ferramentas. |
-| `requirements-dev.txt` | Dependências para desenvolvimento e execução da suíte Python. |
-| `requirements-flink.txt` | Dependências Python adicionais do runtime PyFlink. |
-| `requirements.txt` | Dependências Python usadas pelo Producer e pelo consumer. |
+| `requirements.txt` | Pins de aplicação, qualidade e runtime Flink; cada imagem e ambiente instala seu subconjunto sob constraints. |
 | `docs/arquitetura.md` | Descreve fluxo, componentes, contratos, garantias, limites e inventário do código. |
 | `docs/progresso.md` | Registra entregas, desafios, correções e validações das dez etapas concluídas. |
 | `sql/.gitkeep` | Mantém versionado o diretório reservado a SQL fora das migrações do PostgreSQL. |

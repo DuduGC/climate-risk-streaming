@@ -10,7 +10,7 @@ RUN groupadd --gid 10001 climate \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin climate
 
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --no-compile -r /app/requirements.txt
+RUN pip install --no-cache-dir --no-compile -c /app/requirements.txt requests confluent-kafka
 
 COPY src/ /app/src/
 

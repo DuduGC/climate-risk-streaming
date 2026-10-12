@@ -24,7 +24,7 @@ jobs:
           python-version: "3.11.14"
 
       - name: Install project and development dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements.txt -r requirements-dev.txt
+        run: python -m pip install --disable-pip-version-check -c requirements.txt requests confluent-kafka pytest ruff
 
       - name: Run unit and local integration suite
         run: python -m pytest -q
@@ -55,7 +55,7 @@ jobs:
           python-version: "3.11.14"
 
       - name: Install project and development dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements.txt -r requirements-dev.txt
+        run: python -m pip install --disable-pip-version-check -c requirements.txt requests confluent-kafka pytest ruff
 
       - name: Prepare isolated Compose image tag
         run: |
@@ -124,7 +124,7 @@ jobs:
             -lc '
           set -euo pipefail
           python3.11 -c "import sys; from importlib.metadata import version; import pyflink; assert sys.version_info[:3] == (3, 11, 14), sys.version; assert version(\"apache-flink\") == \"1.20.3\", version(\"apache-flink\"); print(\"Python \" + sys.version.split()[0] + \" / PyFlink \" + version(\"apache-flink\"))"
-          python3.11 -m pip install --disable-pip-version-check --no-cache-dir -r requirements-dev.txt
+          python3.11 -m pip install --disable-pip-version-check --no-cache-dir -c requirements.txt pytest ruff
           python3.11 - << "PY"
           import pytest
 

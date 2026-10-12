@@ -39,7 +39,6 @@ logs/
 *~
 README.md
 compose.yaml
-requirements-dev.txt
 .gitignore
 
 # Local credential material.
