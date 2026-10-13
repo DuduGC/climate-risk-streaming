@@ -6,7 +6,7 @@ Consulte também a [Arquitetura](docs/arquitetura.md) e o [Progresso](docs/progr
 
 ## Status do projeto
 
-MVP finalizado. Concluí as dez etapas entre 2026-10-07 e 2026-10-12. O fechamento registrado lista 695 testes aprovados, 31 testes opcionais ou dependentes do SDK ignorados, Ruff e builds locais das imagens aprovados. Também passaram os comandos locais equivalentes aos jobs de qualidade, integração Python/Kafka e SDK Flink. O GitHub Actions ainda não foi executado porque o repositório não tem remoto configurado.
+MVP finalizado. Concluí as dez etapas entre 2026-10-07 e 2026-10-12. O fechamento registrado lista 695 testes aprovados, 31 testes opcionais ou dependentes do SDK ignorados, Ruff e builds locais das imagens aprovados. Também passaram os comandos locais equivalentes aos jobs de qualidade, integração Python/Kafka e SDK Flink.
 
 ## Funcionalidades
 
