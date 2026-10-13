@@ -261,6 +261,55 @@ docker compose exec -T -u flink flink-jobmanager /opt/flink/bin/flink run -d -s 
 
 Substitua o caminho de exemplo pelo `external_path` do checkpoint completo escolhido. Preserve o grupo, o nome e os UIDs do grafo; não use `--allowNonRestoredState`. Reiniciar os containers não submete o job automaticamente.
 
+### Coletas de 12 e 13 de outubro de 2026
+
+Este snapshot foi registrado em 13/10/2026. Os horários locais estão em BRT (UTC-3), e as datas abaixo seguem o horário dos eventos.
+
+| Data dos eventos | Avaliações adicionadas ao banco | Por localidade | Alertas adicionados ao banco |
+| --- | ---: | --- | ---: |
+| 2026-10-12 | 21 | 7 por localidade | 7, todos de CT01 (CRITICAL, score 75) |
+| 2026-10-13 | 6 | 2 por localidade | 0 |
+
+Esse recorte mostra as linhas adicionadas durante a execução de 13/10, não o total diário. A retomada persistiu as 21 avaliações referentes a 12/10; por isso, os sete alertas pertencem a essa data. As seis avaliações de 13/10 não geraram alertas.
+
+| Tabela PostgreSQL | Antes | Depois | Diferença |
+| --- | ---: | ---: | ---: |
+| `climate.weather_metrics` | 465 | 492 | +27 |
+| `climate.weather_alerts` | 86 | 93 | +7 |
+
+Os totais das tabelas incluem registros históricos e de testes, portanto não representam contagens diárias.
+
+#### Ciclos do Producer em 13/10
+
+Dois ciclos manuais `--once` confirmaram três entregas cada, uma para RJ01, SP01 e CT01.
+
+| Horário dos eventos (BRT) | Entregas confirmadas |
+| --- | ---: |
+| 10:45 | 3 de 3 |
+| 11:00 | 3 de 3 |
+
+A amostra de métricas termina na janela 10:25–10:55, com evento às 10:45. O timestamp de 11:00 do segundo ciclo ainda não aparece nessas linhas.
+
+#### Últimas janelas fechadas
+
+Em 12/10, a última janela foi 19:15–19:45 BRT e contém uma observação, às 19:15:
+
+| Cidade (ID) | Temperatura média (°C) | Precipitação máxima (mm) | Vento máximo (km/h) | Rajada máxima (km/h) | Visibilidade mínima (m) | Score | Nível |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Rio de Janeiro (RJ01) | 23,4 | 0 | 8,4 | 22,3 | 21.440 | 0 | LOW |
+| São Paulo (SP01) | 19,6 | 0 | 6,3 | 14,4 | 11.240 | 0 | LOW |
+| Curitiba (CT01) | 15,6 | 0 | 11,3 | 28,1 | 240 | 75 | CRITICAL |
+
+Em 13/10, a última janela foi 10:25–10:55 BRT e contém uma observação, às 10:45:
+
+| Cidade (ID) | Temperatura média (°C) | Precipitação máxima (mm) | Vento máximo (km/h) | Rajada máxima (km/h) | Visibilidade mínima (m) | Score | Nível |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Rio de Janeiro (RJ01) | 25,9 | 0 | 11,8 | 31,7 | 17.140 | 25 | MEDIUM |
+| São Paulo (SP01) | 24,1 | 0 | 9,0 | 24,8 | 28.020 | 0 | LOW |
+| Curitiba (CT01) | 22,9 | 0 | 9,9 | 25,6 | 31.400 | 0 | LOW |
+
+Na consulta deste snapshot, os sete IDs novos apareceram nos logs de recebimento do consumer; o job estava `RUNNING`, no checkpoint 313, sem falhas de checkpoint registradas.
+
 ### Parar os serviços
 
 Para parar os containers e preservar os volumes:
